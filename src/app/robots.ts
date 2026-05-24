@@ -1,1 +1,14 @@
-import type { MetadataRoute } from 'next';const base=process.env.NEXT_PUBLIC_SITE_URL||'https://bedsoil.vercel.app';export default function robots():MetadataRoute.Robots{return{rules:{userAgent:'*',allow:'/'},sitemap:`${base}/sitemap.xml`}}
+import type { MetadataRoute } from 'next';
+import { SITE_URL } from '@/lib/site';
+
+const baseUrl = SITE_URL;
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: {
+      userAgent: '*',
+      allow: '/',
+    },
+    sitemap: `${baseUrl}/sitemap.xml`,
+  };
+}

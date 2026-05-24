@@ -1,2 +1,18 @@
-import type { MetadataRoute } from 'next';import {pages} from './[slug]/page';
-const base=process.env.NEXT_PUBLIC_SITE_URL||'https://bedsoil.vercel.app';export default function sitemap():MetadataRoute.Sitemap{return[{url:base,lastModified:new Date(),changeFrequency:'weekly',priority:1},...pages.map(p=>({url:`${base}/${p.slug}`,lastModified:new Date(),changeFrequency:'weekly' as const,priority:p.legal?.length?.valueOf()?0.4:0.8}))]}
+import type { MetadataRoute } from 'next';
+import { allPages } from '@/lib/data/pages';
+import { SITE_URL } from '@/lib/site';
+
+const baseUrl = SITE_URL;
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const now = new Date();
+  return [
+    { url: baseUrl, lastModified: now, changeFrequency: 'weekly', priority: 1 },
+    ...allPages.map((page) => ({
+      url: `${baseUrl}/${page.slug}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: page.legal ? 0.4 : 0.8,
+    })),
+  ];
+}

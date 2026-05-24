@@ -1,22 +1,95 @@
-import type { Metadata } from 'next';import Link from 'next/link';import {notFound} from 'next/navigation';import{Calculator,FAQ,Disclaimer}from'../page';
-type Page={slug:string;title:string;description:string;initial?:string;formula?:string;example?:string;notes?:string[];legal?:string[];related?:string[]};
-export const pages:Page[]=[
-{slug:'raised-bed-soil-calculator',title:'Raised Bed Soil Calculator',description:'Calculate cubic feet, cubic yards, liters, bags, settling allowance, mix, and shopping list for raised beds.',initial:'raised',formula:'length × width × effective depth × number of beds × (1 + settling allowance)',example:'A 4 ft × 8 ft bed filled 12 in deep equals 32 ft³, or about 1.19 yd³.',notes:['Default units use feet for length and width, inches for depth.','Use freeboard when the soil surface should sit below the bed edge.'],related:['4x8-raised-bed-soil-calculator','soil-bags-calculator','raised-bed-soil-mix-calculator']},
-{slug:'4x8-raised-bed-soil-calculator',title:'4×8 Raised Bed Soil Calculator',description:'Use 4×8 presets for 6, 8, 10, 12, 18, and 24 inch raised bed depths.',initial:'raised',formula:'4 × 8 × depth in feet = cubic feet of soil',example:'A 4×8×12 in bed is 32 ft³. With 10% settling, it becomes 35.2 ft³.',notes:['4×8 gives 32 square feet of planting area.','8×4 is the same volume.'],related:['raised-bed-soil-calculator','square-foot-garden-spacing-calculator','annual-raised-bed-top-off-calculator']},
-{slug:'soil-bags-calculator',title:'Soil Bags Calculator',description:'Convert required soil volume into 40 dry quart, 1 ft³, 1.5 ft³, 2 ft³, 3 ft³, 50 L, or custom bags.',initial:'bags',formula:'bags needed = ceil(required ft³ ÷ bag ft³)',example:'32 ft³ ÷ 2 ft³ per bag = 16 bags. 32 ft³ ÷ 1.5 ft³ per bag = 22 bags with about 1 ft³ left over.',notes:['Bag counts round up.','Use the volume printed on the package when possible.'],related:['raised-bed-soil-calculator','40-qt-soil-bag-calculator','bulk-soil-vs-bags-calculator']},
-{slug:'bulk-soil-vs-bags-calculator',title:'Bulk Soil vs Bags Calculator',description:'Compare bagged soil cost with bulk cubic-yard soil delivery including fee and minimum order.',initial:'bulk',formula:'bulk total = max(required yd³, minimum order yd³) × price per yd³ + delivery fee',example:'If the minimum order is larger than your need, the calculator shows extra overbuy volume before recommending bulk.',notes:['Bulk can be cheaper for larger fills.','Small fills often remain easier with bags.'],related:['raised-bed-soil-calculator','soil-bags-calculator','raised-bed-soil-mix-calculator']},
-{slug:'raised-bed-soil-mix-calculator',title:'Raised Bed Soil Mix Calculator',description:'Split total raised bed soil volume into topsoil, compost, potting mix, soilless mix, or Mel’s Mix style components.',initial:'mix',formula:'component volume = total volume × component percentage',example:'A 32 ft³ 60/30/10 mix needs 19.2 ft³ topsoil, 9.6 ft³ compost, and 3.2 ft³ potting mix.',notes:['This calculates ratios; it does not prescribe a regional soil recipe.','Custom percentages must total 100%.'],related:['raised-bed-soil-calculator','bulk-soil-vs-bags-calculator','soil-bags-calculator']},
-{slug:'container-soil-calculator',title:'Container Soil Calculator',description:'Calculate soil volume for rectangular planters, round pots, tapered pots, and grow bags.',initial:'containers',formula:'rectangular volume = length × width × depth; round volume = π × radius² × height',example:'Container volume converts to cubic feet and then into bags using the same bag calculator.',notes:['Container labels may differ from actual filled volume.','Most containers use potting mix rather than dense garden soil.'],related:['grow-bag-soil-calculator','soil-bags-calculator','raised-bed-soil-calculator']},
-{slug:'grow-bag-soil-calculator',title:'Grow Bag Soil Calculator',description:'Convert grow bag gallons into cubic feet, liters, dry quarts, and bag counts.',initial:'containers',formula:'grow bag ft³ = gallons × 0.133680556 × quantity',example:'10 × 15-gallon grow bags plus 6 × 10-gallon grow bags equals 210 gallons, or about 28.07 ft³.',notes:['Grow bag ratings are nominal.','Shape, folding, compaction, and fill line change real fill.'],related:['container-soil-calculator','soil-bags-calculator','raised-bed-soil-mix-calculator']},
-{slug:'square-foot-garden-spacing-calculator',title:'Square Foot Garden Spacing Calculator',description:'Estimate square-foot grid count and plant counts for common raised bed crops.',initial:'spacing',formula:'total squares = floor(length ft) × floor(width ft)',example:'A 4×8 bed gives 32 one-square-foot spaces. A 4×4 bed gives 16 spaces.',notes:['Plant counts are general spacing estimates.','Large crops may need more room.'],related:['4x8-raised-bed-soil-calculator','raised-bed-depth-calculator','raised-bed-soil-calculator']},
-{slug:'raised-bed-depth-calculator',title:'Raised Bed Depth Calculator',description:'Check whether a raised bed depth is generally suitable for common crop groups.',initial:'depth',formula:'depth is compared with crop minimum and ideal depth ranges',example:'Six inches can work for shallow greens, while tomatoes and peppers are usually better at 12 inches or deeper.',notes:['Depth guidance is conservative.','Soil quality, watering, variety, and climate still matter.'],related:['raised-bed-soil-calculator','square-foot-garden-spacing-calculator','annual-raised-bed-top-off-calculator']},
-{slug:'annual-raised-bed-top-off-calculator',title:'Annual Raised Bed Top-Off Calculator',description:'Calculate compost or soil needed to top off a raised bed by 1, 2, 3, or custom inches.',initial:'topoff',formula:'top-off volume = length × width × top-off depth × number of beds',example:'A 4×8 bed topped off by 2 inches needs 5.33 ft³ of material.',notes:['Useful after compost breakdown and seasonal settling.','Use compost-heavy top-off only when appropriate.'],related:['raised-bed-soil-calculator','soil-bags-calculator','raised-bed-soil-mix-calculator']},
-{slug:'40-qt-soil-bag-calculator',title:'40-Qt Soil Bag Calculator',description:'Convert cubic feet or raised bed volume into 40 dry quart soil bags.',initial:'bags',formula:'40 dry quarts ≈ 1.56 ft³; bags = ceil(required ft³ ÷ 1.56)',example:'A 40 dry quart bag is about 1.56 ft³.',notes:['Dry quarts and liquid quarts are not identical.','Package labels are the source of truth.'],related:['soil-bags-calculator','raised-bed-soil-calculator','bulk-soil-vs-bags-calculator']},
-{slug:'about',title:'About BedSoil',description:'About the BedSoil raised bed soil and planting calculator.',legal:['BedSoil is a free planning tool for raised bed gardeners, container gardeners, and square foot gardening users.','It focuses on soil volume, bags, bulk cost, mix ratios, top-off, container volume, and simple planting space calculations.']},
-{slug:'privacy',title:'Privacy Policy',description:'Privacy information for BedSoil.',legal:['BedSoil performs calculator inputs in your browser and does not require an account.','If analytics or ads are enabled, third-party providers may process standard usage, device, and browser information according to their policies.']},
-{slug:'terms',title:'Terms of Use',description:'Terms of use for BedSoil.',legal:['The calculators are provided for planning and estimation only.','You are responsible for checking product labels, local prices, delivery rules, and gardening conditions before purchasing materials.']},
-{slug:'disclaimer',title:'Disclaimer',description:'Planning disclaimer for BedSoil calculators.',legal:['BedSoil does not provide agricultural, pest, disease, medical, environmental, or engineering advice.','Soil volume, mix, and spacing results are estimates. Real needs vary by material density, moisture, compaction, bed construction, crop variety, and local growing conditions.']},
-{slug:'affiliate-disclosure',title:'Affiliate Disclosure',description:'Affiliate disclosure for BedSoil.',legal:['BedSoil may include affiliate links to gardening products. If you buy through those links, the site may earn a commission at no extra cost to you.','Affiliate placements should not change calculator formulas or estimates.']}];
-export function generateStaticParams(){return pages.map(p=>({slug:p.slug}))}export function generateMetadata({params}:{params:{slug:string}}):Metadata{const p=pages.find(x=>x.slug===params.slug);return p?{title:p.title,description:p.description,alternates:{canonical:`/${p.slug}`}}:{}}
-export default function Slug({params}:{params:{slug:string}}){const p=pages.find(x=>x.slug===params.slug);if(!p)notFound();if(p.legal)return <main className="page"><section className="hero"><p className="eyebrow">BedSoil</p><h1>{p.title}</h1><p>{p.description}</p></section><section className="card">{p.legal.map(x=><p key={x}>{x}</p>)}</section><Related slugs={['raised-bed-soil-calculator']}/></main>;return <main className="page two"><div><section className="hero"><p className="eyebrow">Raised Bed Soil & Planting Calculator</p><h1>{p.title}</h1><p>{p.description}</p></section><Calculator initial={p.initial}/><section className="card"><h2>How to use</h2><ol><li>Enter the relevant bed, bag, bulk, mix, container, spacing, top-off, or depth inputs.</li><li>Review volume, bags, cost, mix breakdown, warnings, and the shopping list.</li><li>Copy the shopping list or print the result before buying materials.</li></ol><h2>Common sizes and presets</h2><p>Includes 4×8 presets at 6, 8, 10, 12, 18, and 24 inches, common soil bag sizes, grow bag groups, and 4×4 / 4×8 square-foot grids.</p><h2>Formula</h2><p>{p.formula}</p><h2>Example calculation</h2><p>{p.example}</p><h2>Practical notes</h2><ul>{p.notes?.map(n=><li key={n}>{n}</li>)}</ul></section><FAQ/><Disclaimer/><Related slugs={p.related||[]}/></div><aside><div className="ad sidebar">Advertisement placeholder: desktop sidebar</div></aside></main>}
-function Related({slugs}:{slugs:string[]}){return <section className="card"><h2>Related calculators</h2><div className="links">{slugs.map(s=><Link className="pill" key={s} href={`/${s}`}>{s.replaceAll('-',' ')}</Link>)}</div></section>}
+import { notFound } from 'next/navigation';
+import { AdSlot } from '@/components/AdSlot';
+import { Calculator } from '@/components/Calculator';
+import { Disclaimer } from '@/components/Disclaimer';
+import { FAQ } from '@/components/FAQ';
+import { RelatedLinks } from '@/components/RelatedLinks';
+import { AffiliateSlot } from '@/components/AffiliateSlot';
+import { allPages, pageMetadata } from '@/lib/data/pages';
+
+function calculatorStructuredData(page: { title: string; description: string; slug: string }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: page.title,
+    description: page.description,
+    applicationCategory: 'UtilitiesApplication',
+    operatingSystem: 'Any',
+    url: `/${page.slug}`,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  };
+}
+
+export function generateStaticParams() {
+  return allPages.map((page) => ({ slug: page.slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const page = allPages.find((candidate) => candidate.slug === slug);
+  if (!page) return {};
+  return pageMetadata(page);
+}
+
+export default async function SlugPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const page = allPages.find((candidate) => candidate.slug === slug);
+  if (!page) notFound();
+
+  if (page.legal) {
+    return (
+      <main className="page">
+        <section className="hero">
+          <p className="eyebrow">BedSoil</p>
+          <h1>{page.title}</h1>
+          <p>{page.description}</p>
+        </section>
+        <section className="content-card">
+          {page.legal.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+        </section>
+        <RelatedLinks slugs={['raised-bed-soil-calculator', 'soil-bags-calculator', 'raised-bed-soil-mix-calculator']} />
+      </main>
+    );
+  }
+
+  return (
+    <main className="page two-column">
+      <div>
+        <section className="hero">
+          <p className="eyebrow">Raised Bed Soil & Planting Calculator</p>
+          <h1>{page.title}</h1>
+          <p>{page.description}</p>
+        </section>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(calculatorStructuredData(page)) }} />
+
+        <Calculator initial={page.initial} presetSlug={page.slug} />
+
+        <section className="content-card">
+          <h2>How to use</h2>
+          <ol>
+            <li>Enter the relevant bed, bag, bulk, mix, container, spacing, top-off, or depth inputs.</li>
+            <li>Review soil volume, bags, cost, mix breakdown, warnings, and the shopping list.</li>
+            <li>Copy the shopping list or print the result before buying materials.</li>
+          </ol>
+          <h2>Formula</h2>
+          <p>{page.formula}</p>
+          <h2>Example calculation</h2>
+          <p>{page.example}</p>
+          <h2>Common sizes and presets</h2>
+          <p>Includes 4×8 presets at 6, 8, 10, 12, 18, and 24 inches, common soil bag sizes, grow bag groups, and 4×4 / 4×8 square-foot grids.</p>
+          <h2>Practical notes</h2>
+          <ul>{page.notes?.map((note) => <li key={note}>{note}</li>)}</ul>
+        </section>
+
+        <AffiliateSlot />
+        {page.slug.includes('checklist') ? <section className="content-card"><h2>Seasonal checklist</h2><ul><li>Measure current soil surface below the bed rim.</li><li>Estimate 1, 2, or 3 inches of top-off material before buying bags.</li><li>Check whether crops need deeper soil before planting.</li><li>Use compost and mulch as planning estimates, not a region-specific calendar.</li><li>Print or copy the shopping list before visiting a garden center.</li></ul></section> : null}
+        <FAQ />
+        <Disclaimer />
+        <RelatedLinks slugs={page.related ?? ['raised-bed-soil-calculator', 'soil-bags-calculator']} />
+      </div>
+      <aside>
+        <AdSlot placement="sidebar" />
+      </aside>
+    </main>
+  );
+}

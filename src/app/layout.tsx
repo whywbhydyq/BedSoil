@@ -1,4 +1,60 @@
-import type { Metadata } from 'next';import Link from 'next/link';import './globals.css';
-export const metadata:Metadata={metadataBase:new URL(process.env.NEXT_PUBLIC_SITE_URL||'https://bedsoil.vercel.app'),title:{default:'BedSoil - Raised Bed Soil Calculator',template:'%s | BedSoil'},description:'Raised bed soil, bag, bulk cost, soil mix, grow bag, annual top-off, depth, and square foot planting calculators.',openGraph:{siteName:'BedSoil',type:'website'}};
-const nav=['raised-bed-soil-calculator','4x8-raised-bed-soil-calculator','soil-bags-calculator','bulk-soil-vs-bags-calculator','raised-bed-soil-mix-calculator','container-soil-calculator','square-foot-garden-spacing-calculator'];
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body><header className="header"><div className="bar"><Link className="brand" href="/">BedSoil</Link><nav className="nav">{nav.map(s=><Link key={s} href={`/${s}`}>{s.replaceAll('-',' ').replace('calculator','')}</Link>)}</nav></div></header>{children}<footer className="footer"><div className="bar nav"><Link href="/about">About</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/disclaimer">Disclaimer</Link><Link href="/affiliate-disclosure">Affiliate Disclosure</Link></div></footer></body></html>}
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import Script from 'next/script';
+import { ADSENSE_CLIENT, SITE_URL } from '@/lib/site';
+import './globals.css';
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'BedSoil - Raised Bed Soil Calculator',
+    template: '%s | BedSoil',
+  },
+  description: 'Raised bed soil, bag, bulk cost, soil mix, grow bag, annual top-off, depth, and square foot planting calculators.',
+  openGraph: {
+    siteName: 'BedSoil',
+    type: 'website',
+  },
+  other: {
+    'google-adsense-account': ADSENSE_CLIENT,
+  },
+};
+
+const nav = [
+  ['Raised Bed', '/raised-bed-soil-calculator'],
+  ['4×8', '/4x8-raised-bed-soil-calculator'],
+  ['Bags', '/soil-bags-calculator'],
+  ['Bulk vs Bags', '/bulk-soil-vs-bags-calculator'],
+  ['Soil Mix', '/raised-bed-soil-mix-calculator'],
+  ['Containers', '/container-soil-calculator'],
+  ['Spacing', '/square-foot-garden-spacing-calculator'],
+];
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Script async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`} crossOrigin="anonymous" strategy="afterInteractive" />
+        <header className="header">
+          <div className="bar">
+            <Link className="brand" href="/">BedSoil</Link>
+            <nav className="nav" aria-label="Primary navigation">
+              {nav.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}
+            </nav>
+          </div>
+        </header>
+        {children}
+        <footer className="footer">
+          <div className="bar nav">
+            <Link href="/about">About</Link>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/disclaimer">Disclaimer</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/affiliate-disclosure">Affiliate Disclosure</Link>
+          </div>
+        </footer>
+      </body>
+    </html>
+  );
+}
