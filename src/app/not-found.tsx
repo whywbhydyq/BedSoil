@@ -1,0 +1,1 @@
+import Link from 'next/link';export default function NotFound(){return <main className="page"><section className="hero"><h1>Page not found</h1><p>This BedSoil calculator page does not exist.</p><Link className="pill primary" href="/">Go home</Link></section></main>}

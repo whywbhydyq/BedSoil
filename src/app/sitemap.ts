@@ -1,0 +1,2 @@
+import type { MetadataRoute } from 'next';import {pages} from './[slug]/page';
+const base=process.env.NEXT_PUBLIC_SITE_URL||'https://bedsoil.vercel.app';export default function sitemap():MetadataRoute.Sitemap{return[{url:base,lastModified:new Date(),changeFrequency:'weekly',priority:1},...pages.map(p=>({url:`${base}/${p.slug}`,lastModified:new Date(),changeFrequency:'weekly' as const,priority:p.legal?.length?.valueOf()?0.4:0.8}))]}
