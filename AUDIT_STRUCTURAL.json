@@ -1,0 +1,31 @@
+{
+  "audit_basis": "Full original requirements document retrieved from GitHub blob d4153290feadcc3b7715a3513057c9cf4f9ea199, not the earlier local summary copy.",
+  "timestamp": "2026-05-24T15:38:46.183489Z",
+  "route_count": 65,
+  "unique_route_count": 65,
+  "required_45_seo_pages_missing": [],
+  "required_45_seo_pages_complete": true,
+  "meta_keywords_hits_in_src": [],
+  "p0_status": "complete",
+  "p1_status": "complete for all doable/non-forbidden features named in the original requirements",
+  "forbidden_features_status": "not implemented",
+  "adsense_status": "fixed AdSense account metadata/script client in src/lib/site.ts plus public/ads.txt publisher line; no Vercel env required",
+  "validation": {
+    "npm_test": "passed: 17/17",
+    "npm_lint_max_warnings_0": "passed",
+    "tsc_no_emit": "passed",
+    "next_build": "compiled and generated 70 static pages, then container timeout at final process exit; route table present in /tmp/bedsoil_build.log"
+  },
+  "source_files_count_excluding_node_modules": 49,
+  "packaging": "node_modules, .next, .vercel, and tsconfig.tsbuildinfo removed before zip",
+  "production_domain": "https://bedsoil.ymirtool.com",
+  "production_url": "https://bedsoil.ymirtool.com",
+  "adsense_client": "ca-pub-1653188471819736",
+  "ads_txt": "google.com, pub-1653188471819736, DIRECT, f08c47fec0942fa0",
+  "domain_update_status": "source defaults updated for metadataBase, sitemap, robots; .env.example added; /contact added",
+  "vercel_env_required": false,
+  "adsense_config": "hardcoded fixed-domain source values in src/lib/site.ts plus public/ads.txt publisher line",
+  "requirements_document": "full original document included in root markdown file",
+  "development_plan_document": "full original development plan included in root markdown file",
+  "final_packaging_correction": "removed misleading claim that Vercel env is required; local package has fixed production values"
+}

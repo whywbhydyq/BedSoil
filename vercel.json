@@ -1,1 +1,3 @@
-{"ignoreCommand":"node scripts/skip-old-vercel-builds.mjs"}
+{
+  "ignoreCommand": "node scripts/skip-old-vercel-builds.mjs"
+}
