@@ -28,7 +28,7 @@ import {
   type SoilMixInput,
   type SoilMixComponent,
   type CalculatorWarning,
-} from '@/lib/calculators';
+} from '@/lib/calculators/index';
 import { BAG_PRESETS, RAISED_BED_PRESETS, SOIL_MIX_TEMPLATES } from '@/lib/data/presets';
 import { fmt, plantText } from '@/lib/utils/format';
 import { AdSlot } from './AdSlot';
@@ -227,7 +227,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     if (slug === 'how-much-soil-for-45-six-inch-pots') { setContainerMode('round'); setContainerWidth(6); setContainerDepth(6); setContainerQty(45); setTab('containers'); }
     if (slug === '4x8-raised-bed-planting-layout' || slug === 'how-many-tomato-plants-in-4x8-raised-bed') { setTab('spacing'); setGridLength(4); setGridWidth(8); setCrop('tomato'); }
     if (slug === 'raised-bed-depth-for-tomatoes') { setTab('depth'); setCrop('tomato'); setDepth(12); }
-    if (slug === 'raised-bed-depth-for-carrots') { setTab('depth'); setCrop('carrot'); setDepth(10); }
+    if (slug === 'raised-bed-depth-for-carrots') { setTab('depth'); setCrop('carrot'); }
   }, []);
 
   useEffect(() => {
@@ -284,8 +284,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       setLengthUnit('ft');
       setWidthUnit('ft');
       setDepthUnit('in');
-      setBagSize(2);
-      setBagUnit('ft3');
     }
   }
 
