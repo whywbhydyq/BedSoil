@@ -60,6 +60,15 @@ describe('BedSoil required acceptance calculations', () => {
     expect(volumeToFt3(40, 'dryQuart')).toBeCloseTo(1.56, 2);
   });
 
+
+  it('does not treat weight-only soil bags as a reliable bag-count estimate', () => {
+    const result = calculateSoilBags(32, { bagSize: 40, bagUnit: 'lb', bagPrice: 5 });
+    expect(result.canEstimateBags).toBe(false);
+    expect(result.isWeightBased).toBe(true);
+    expect(result.bagsNeeded).toBe(0);
+    expect(result.warnings.some((warning) => warning.code === 'weight-based-bag')).toBe(true);
+  });
+
   it('10 × 15-gallon grow bags + 6 × 10-gallon grow bags = 210 gallons ≈ 28.07 ft³', () => {
     const result = calculateGrowBagVolume({ gallons: 10 * 15 + 6 * 10, quantity: 1 });
     expect(result.finalVolumeFt3).toBeCloseTo(28.07, 2);
@@ -143,6 +152,15 @@ describe('BedSoil completed P1 planning functions', () => {
     expect(result.overbuyFt3).toBeCloseTo(22, 4);
     expect(result.bagCostPerFt3).toBeCloseTo(4, 4);
     expect(result.bulkCostPerFt3).toBeCloseTo(160 / 54, 4);
+  });
+
+
+  it('supports pickup bulk mode and warns when no truck or trailer is available', () => {
+    const result = compareBulkVsBags(54, { bagSize: 2, bagUnit: 'ft3', bagPrice: 8 }, { pricePerCubicYard: 55, deliveryFee: 90, pickupTripCost: 15, minimumOrderYards: 2, fulfillmentMode: 'pickup', truckAvailability: 'notAvailable' });
+    expect(result.fulfillmentMode).toBe('pickup');
+    expect(result.serviceCost).toBe(15);
+    expect(result.bulkTotalCost).toBeCloseTo(125, 4);
+    expect(result.warnings.some((warning) => warning.code === 'bulk-pickup-no-truck')).toBe(true);
   });
 });
 

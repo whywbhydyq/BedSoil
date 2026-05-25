@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BagUnit,
+  BulkFulfillmentMode,
   CurrencyCode,
   LengthUnit,
+  TruckAvailability,
+  VolumeUnit,
   CROPS,
   calculateAnnualTopOff,
   calculateTopOffMaterials,
@@ -20,6 +23,7 @@ import {
   calculateSoilMix,
   calculateSquareFootSpacing,
   calculateTaperedPotVolume,
+  makeVolumeResult,
   calculateUShapedRaisedBedVolume,
   checkDepthSuitability,
   compareBulkVsBags,
@@ -27,16 +31,18 @@ import {
   estimateRaisedBedProjectCost,
   type SoilMixInput,
   type SoilMixComponent,
+  lengthToFeet,
+  volumeToFt3,
   type CalculatorWarning,
-} from '@/lib/calculators/index';
+} from '@/lib/calculators';
 import { BAG_PRESETS, RAISED_BED_PRESETS, SOIL_MIX_TEMPLATES } from '@/lib/data/presets';
 import { fmt, plantText } from '@/lib/utils/format';
-import { AdSlot } from './AdSlot';
 
 type Tab = 'raised' | 'bags' | 'bulk' | 'mix' | 'containers' | 'spacing' | 'topoff' | 'depth' | 'cost' | 'multi' | 'shapes';
 type ContainerMode = 'grow' | 'rect' | 'round' | 'taper';
 type ShapeMode = 'round' | 'lShape' | 'uShape';
 type UnitPreset = 'us' | 'metric';
+type VolumeSource = 'bed' | 'manual';
 
 function NumberInput({ label, value, setValue, step = 1 }: { label: string; value: number; setValue: (value: number) => void; step?: number }) {
   return (
@@ -57,6 +63,39 @@ function warningKey(warning: CalculatorWarning) {
 
 function warningsText(warnings: CalculatorWarning[]) {
   return warnings.map((warning) => `[${warning.severity}] ${warning.message}`).join('\n');
+}
+
+
+function roundInput(value: number, digits = 2): number {
+  if (!Number.isFinite(value)) return 0;
+  return Number(value.toFixed(digits));
+}
+
+function feetToLengthUnit(feet: number, unit: LengthUnit): number {
+  switch (unit) {
+    case 'ft': return feet;
+    case 'in': return feet * 12;
+    case 'cm': return feet * 30.48;
+    case 'm': return feet / 3.280839895;
+  }
+}
+
+function convertLengthInput(value: number, from: LengthUnit, to: LengthUnit): number {
+  return roundInput(feetToLengthUnit(lengthToFeet(value, from), to), to === 'm' ? 3 : 2);
+}
+
+function ft3ToVolumeUnit(valueFt3: number, unit: VolumeUnit): number {
+  switch (unit) {
+    case 'ft3': return valueFt3;
+    case 'yd3': return valueFt3 / 27;
+    case 'liter': return valueFt3 * 28.316846592;
+    case 'dryQuart': return valueFt3 * 25.71404638;
+    case 'gallon': return valueFt3 * 7.48051948;
+  }
+}
+
+function convertVolumeInput(value: number, from: VolumeUnit, to: VolumeUnit): number {
+  return roundInput(ft3ToVolumeUnit(volumeToFt3(value, from), to), to === 'yd3' ? 3 : 2);
 }
 
 
@@ -97,6 +136,14 @@ const bagUnitOptions = [
   { label: 'kg warning', value: 'kg' },
 ] as const;
 
+const volumeUnitOptions = [
+  { label: 'ft³', value: 'ft3' },
+  { label: 'yd³', value: 'yd3' },
+  { label: 'L', value: 'liter' },
+  { label: 'dry qt', value: 'dryQuart' },
+  { label: 'gal', value: 'gallon' },
+] as const;
+
 const currencyOptions = [
   { label: 'USD', value: 'USD' },
   { label: 'CAD', value: 'CAD' },
@@ -108,6 +155,9 @@ const currencyOptions = [
 export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; presetSlug?: string }) {
   const [tab, setTab] = useState<Tab>(initial);
   const [unitPreset, setUnitPreset] = useState<UnitPreset>('us');
+  const [volumeSource, setVolumeSource] = useState<VolumeSource>(initial === 'bags' || initial === 'bulk' || initial === 'mix' ? 'manual' : 'bed');
+  const [manualVolume, setManualVolume] = useState(32);
+  const [manualVolumeUnit, setManualVolumeUnit] = useState<VolumeUnit>('ft3');
   const [length, setLength] = useState(4);
   const [width, setWidth] = useState(8);
   const [depth, setDepth] = useState(12);
@@ -116,14 +166,17 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   const [depthUnit, setDepthUnit] = useState<LengthUnit>('in');
   const [numberOfBeds, setNumberOfBeds] = useState(1);
   const [freeboard, setFreeboard] = useState(0);
-  const [settling, setSettling] = useState(0);
+  const [settling, setSettling] = useState(10);
   const [bagSize, setBagSize] = useState(2);
   const [bagUnit, setBagUnit] = useState<BagUnit>('ft3');
   const [bagPrice, setBagPrice] = useState(8);
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
   const [bulkPrice, setBulkPrice] = useState(55);
   const [deliveryFee, setDeliveryFee] = useState(60);
+  const [pickupTripCost, setPickupTripCost] = useState(0);
   const [minimumOrder, setMinimumOrder] = useState(1);
+  const [bulkFulfillmentMode, setBulkFulfillmentMode] = useState<BulkFulfillmentMode>('delivery');
+  const [truckAvailability, setTruckAvailability] = useState<TruckAvailability>('unknown');
   const [mix, setMix] = useState<keyof typeof SOIL_MIX_TEMPLATES | 'custom'>('basic');
   const [customTopsoil, setCustomTopsoil] = useState(60);
   const [customCompost, setCustomCompost] = useState(30);
@@ -184,19 +237,18 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       setGridLength(Number(sizeMatch[1]));
       setGridWidth(Number(sizeMatch[2]));
     }
-    if (slug === '40-qt-soil-bag-calculator') { setBagSize(40); setBagUnit('dryQuart'); }
-    if (slug === '1-cubic-foot-soil-bag-calculator') { setBagSize(1); setBagUnit('ft3'); }
-    if (slug === '1-5-cubic-foot-soil-bag-calculator') { setBagSize(1.5); setBagUnit('ft3'); }
-    if (slug === '2-cubic-foot-soil-bag-calculator') { setBagSize(2); setBagUnit('ft3'); }
-    if (slug === 'liters-to-soil-bags-calculator') { setLength(120); setWidth(240); setDepth(30); setLengthUnit('cm'); setWidthUnit('cm'); setDepthUnit('cm'); setBagSize(50); setBagUnit('liter'); setUnitPreset('metric'); }
-    if (slug === 'cubic-feet-to-soil-bags-calculator') { setBagSize(2); setBagUnit('ft3'); }
+    if (slug === '40-qt-soil-bag-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(40); setBagUnit('dryQuart'); }
+    if (slug === '1-cubic-foot-soil-bag-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(1); setBagUnit('ft3'); }
+    if (slug === '1-5-cubic-foot-soil-bag-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(1.5); setBagUnit('ft3'); }
+    if (slug === '2-cubic-foot-soil-bag-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(2); setBagUnit('ft3'); }
+    if (slug === 'liters-to-soil-bags-calculator') { setVolumeSource('manual'); setManualVolume(200); setManualVolumeUnit('liter'); setBagSize(50); setBagUnit('liter'); setUnitPreset('metric'); }
+    if (slug === 'cubic-feet-to-soil-bags-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(2); setBagUnit('ft3'); }
     if (slug === 'tomato-spacing-raised-bed') setCrop('tomato');
     if (slug === 'pepper-spacing-raised-bed') setCrop('pepper');
     if (slug === 'lettuce-spacing-square-foot-garden') setCrop('lettuce');
     if (slug === 'carrot-spacing-square-foot-garden') setCrop('carrot');
     if (slug === 'cucumber-spacing-raised-bed') setCrop('cucumber');
     if (slug === 'basil-spacing-square-foot-garden') setCrop('basil');
-    if (slug === '4x8-planting-layout') { setTab('spacing'); setGridLength(4); setGridWidth(8); setCrop('tomato'); }
     if (slug.endsWith('spacing-raised-bed') || slug.endsWith('spacing-square-foot-garden')) { setTab('spacing'); setGridLength(4); setGridWidth(8); }
     if (slug === 'round-raised-bed-soil-calculator') { setShapeMode('round'); setShapeA(6); setDepth(12); setTab('shapes'); }
     if (slug === 'l-shaped-raised-bed-soil-calculator') { setShapeMode('lShape'); setShapeA(8); setShapeB(6); setShapeC(4); setShapeD(3); setDepth(12); setTab('shapes'); }
@@ -209,17 +261,17 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     const fourByEightDepthMatch = slug.match(/^4x8-raised-bed-(6|8|10|12|18|24)-inches-soil$/);
     if (fourByEightDepthMatch) { setLength(4); setWidth(8); setDepth(Number(fourByEightDepthMatch[1])); setTab('raised'); }
     if (slug === 'raised-bed-cubic-feet-calculator') { setLength(4); setWidth(8); setDepth(12); setTab('raised'); }
-    if (slug === 'how-many-bags-of-soil-for-raised-bed') { setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
-    if (slug === 'cubic-yards-to-soil-bags-calculator') { setLength(3); setWidth(3); setDepth(36); setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
-    if (slug === 'liters-to-cubic-feet-soil-calculator') { setLength(120); setWidth(240); setDepth(30); setLengthUnit('cm'); setWidthUnit('cm'); setDepthUnit('cm'); setBagSize(50); setBagUnit('liter'); setUnitPreset('metric'); setTab('bags'); }
-    if (slug === 'how-many-40-lb-bags-of-soil-do-i-need') { setBagSize(40); setBagUnit('lb'); setTab('bags'); }
+    if (slug === 'how-many-bags-of-soil-for-raised-bed') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
+    if (slug === 'cubic-yards-to-soil-bags-calculator') { setVolumeSource('manual'); setManualVolume(1); setManualVolumeUnit('yd3'); setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
+    if (slug === 'liters-to-cubic-feet-soil-calculator') { setVolumeSource('manual'); setManualVolume(200); setManualVolumeUnit('liter'); setBagSize(50); setBagUnit('liter'); setUnitPreset('metric'); setTab('bags'); }
+    if (slug === 'how-many-40-lb-bags-of-soil-do-i-need') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(40); setBagUnit('lb'); setTab('bags'); }
     if (slug === 'raised-bed-cost-calculator' || slug === 'raised-bed-soil-cost-calculator') { setTab('cost'); }
-    if (slug === 'cheapest-way-to-fill-raised-beds') { setTab('bulk'); setMinimumOrder(2); }
+    if (slug === 'cheapest-way-to-fill-raised-beds') { setVolumeSource('manual'); setManualVolume(64); setManualVolumeUnit('ft3'); setTab('bulk'); setMinimumOrder(2); }
     if (slug === 'how-much-bulk-soil-for-raised-beds' || slug === 'cubic-yards-of-soil-for-raised-beds') { setNumberOfBeds(2); setSettling(10); setTab('bulk'); }
-    if (slug === 'compost-topsoil-mix-calculator') { setMix('custom'); setCustomTopsoil(50); setCustomCompost(50); setCustomPotting(0); setTab('mix'); }
-    if (slug === 'mels-mix-calculator') { setMix('melsMix'); setTab('mix'); }
-    if (slug === 'how-much-compost-for-raised-bed') { setMix('basic'); setTab('mix'); }
-    if (slug === 'topsoil-compost-ratio-raised-bed') { setMix('basic'); setTab('mix'); }
+    if (slug === 'compost-topsoil-mix-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setMix('custom'); setCustomTopsoil(50); setCustomCompost(50); setCustomPotting(0); setTab('mix'); }
+    if (slug === 'mels-mix-calculator') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setMix('melsMix'); setTab('mix'); }
+    if (slug === 'how-much-compost-for-raised-bed') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setMix('basic'); setTab('mix'); }
+    if (slug === 'topsoil-compost-ratio-raised-bed') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setMix('basic'); setTab('mix'); }
     if (slug === 'planter-soil-volume-calculator') { setContainerMode('rect'); setTab('containers'); }
     if (slug === '10-gallon-grow-bag-soil-calculator') { setContainerMode('grow'); setGrowGallonsOne(10); setGrowQtyOne(6); setGrowGallonsTwo(0); setGrowQtyTwo(0); setTab('containers'); }
     if (slug === '20-gallon-grow-bag-soil-calculator') { setContainerMode('grow'); setGrowGallonsOne(20); setGrowQtyOne(4); setGrowGallonsTwo(0); setGrowQtyTwo(0); setTab('containers'); }
@@ -238,7 +290,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       if (nextTab && ['raised', 'bags', 'bulk', 'mix', 'containers', 'spacing', 'topoff', 'depth', 'cost', 'multi', 'shapes'].includes(nextTab)) setTab(nextTab);
       const numericSetters: [string, (value: number) => void][] = [
         ['l', setLength], ['w', setWidth], ['d', setDepth], ['beds', setNumberOfBeds], ['free', setFreeboard], ['settle', setSettling],
-        ['bagSize', setBagSize], ['bagPrice', setBagPrice], ['bulkPrice', setBulkPrice], ['delivery', setDeliveryFee], ['minOrder', setMinimumOrder],
+        ['bagSize', setBagSize], ['bagPrice', setBagPrice], ['mv', setManualVolume], ['bulkPrice', setBulkPrice], ['delivery', setDeliveryFee], ['pickupCost', setPickupTripCost], ['minOrder', setMinimumOrder],
         ['gridL', setGridLength], ['gridW', setGridWidth], ['topoff', setTopOffDepth],
         ['shapeA', setShapeA], ['shapeB', setShapeB], ['shapeC', setShapeC], ['shapeD', setShapeD],
         ['c1l', setMultiContainerLengthOne], ['c1w', setMultiContainerWidthOne], ['c1d', setMultiContainerDepthOne], ['c1q', setMultiContainerQtyOne],
@@ -252,15 +304,23 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       const wu = params.get('wu') as LengthUnit | null;
       const du = params.get('du') as LengthUnit | null;
       const bu = params.get('bu') as BagUnit | null;
+      const vu = params.get('vu') as VolumeUnit | null;
+      const vs = params.get('vs') as VolumeSource | null;
       const cur = params.get('cur') as CurrencyCode | null;
       const nextCrop = params.get('crop');
       const nextShape = params.get('shape') as ShapeMode | null;
+      const nextFulfillment = params.get('fulfillment') as BulkFulfillmentMode | null;
+      const nextTruck = params.get('truck') as TruckAvailability | null;
       if (nextCrop && CROPS.some((item) => item.id === nextCrop)) setCrop(nextCrop);
       if (nextShape && ['round', 'lShape', 'uShape'].includes(nextShape)) setShapeMode(nextShape);
+      if (nextFulfillment && ['delivery', 'pickup'].includes(nextFulfillment)) setBulkFulfillmentMode(nextFulfillment);
+      if (nextTruck && ['unknown', 'available', 'notAvailable'].includes(nextTruck)) setTruckAvailability(nextTruck);
       if (lu && ['ft', 'in', 'cm', 'm'].includes(lu)) setLengthUnit(lu);
       if (wu && ['ft', 'in', 'cm', 'm'].includes(wu)) setWidthUnit(wu);
       if (du && ['ft', 'in', 'cm', 'm'].includes(du)) setDepthUnit(du);
       if (bu && ['ft3', 'yd3', 'liter', 'dryQuart', 'gallon', 'lb', 'kg'].includes(bu)) setBagUnit(bu);
+      if (vu && ['ft3', 'yd3', 'liter', 'dryQuart', 'gallon'].includes(vu)) setManualVolumeUnit(vu);
+      if (vs && ['bed', 'manual'].includes(vs)) setVolumeSource(vs);
       if (cur && ['USD', 'CAD', 'GBP', 'AUD', 'EUR'].includes(cur)) setCurrency(cur);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -269,21 +329,31 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   function applyUnitPreset(nextPreset: UnitPreset) {
     setUnitPreset(nextPreset);
     if (nextPreset === 'metric') {
-      setLength(120);
-      setWidth(240);
-      setDepth(30);
+      setLength(convertLengthInput(length, lengthUnit, 'cm'));
+      setWidth(convertLengthInput(width, widthUnit, 'cm'));
+      setDepth(convertLengthInput(depth, depthUnit, 'cm'));
       setLengthUnit('cm');
       setWidthUnit('cm');
       setDepthUnit('cm');
-      setBagSize(50);
-      setBagUnit('liter');
+      setManualVolume(convertVolumeInput(manualVolume, manualVolumeUnit, 'liter'));
+      setManualVolumeUnit('liter');
+      if (bagUnit !== 'lb' && bagUnit !== 'kg') {
+        setBagSize(convertVolumeInput(bagSize, bagUnit, 'liter'));
+        setBagUnit('liter');
+      }
     } else {
-      setLength(4);
-      setWidth(8);
-      setDepth(12);
+      setLength(convertLengthInput(length, lengthUnit, 'ft'));
+      setWidth(convertLengthInput(width, widthUnit, 'ft'));
+      setDepth(convertLengthInput(depth, depthUnit, 'in'));
       setLengthUnit('ft');
       setWidthUnit('ft');
       setDepthUnit('in');
+      setManualVolume(convertVolumeInput(manualVolume, manualVolumeUnit, 'ft3'));
+      setManualVolumeUnit('ft3');
+      if (bagUnit !== 'lb' && bagUnit !== 'kg') {
+        setBagSize(convertVolumeInput(bagSize, bagUnit, 'ft3'));
+        setBagUnit('ft3');
+      }
     }
   }
 
@@ -300,8 +370,13 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     settlingAllowancePercent: settling,
   }), [length, width, depth, lengthUnit, widthUnit, depthUnit, numberOfBeds, freeboard, settling]);
 
-  const bagResult = useMemo(() => calculateSoilBags(bedResult.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [bedResult.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
-  const bulkResult = useMemo(() => compareBulkVsBags(bedResult.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }, { pricePerCubicYard: bulkPrice, deliveryFee, minimumOrderYards: minimumOrder, currency }), [bedResult.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency, bulkPrice, deliveryFee, minimumOrder]);
+  const manualVolumeResult = useMemo(() => {
+    const volumeFt3 = volumeToFt3(manualVolume, manualVolumeUnit);
+    return makeVolumeResult(volumeFt3, volumeFt3, []);
+  }, [manualVolume, manualVolumeUnit]);
+  const sourceVolume = (tab === 'bags' || tab === 'bulk' || tab === 'mix') && volumeSource === 'manual' ? manualVolumeResult : bedResult;
+  const bagResult = useMemo(() => calculateSoilBags(sourceVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [sourceVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
+  const bulkResult = useMemo(() => compareBulkVsBags(sourceVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }, { pricePerCubicYard: bulkPrice, deliveryFee, pickupTripCost, minimumOrderYards: minimumOrder, fulfillmentMode: bulkFulfillmentMode, truckAvailability, currency }), [sourceVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency, bulkPrice, deliveryFee, pickupTripCost, minimumOrder, bulkFulfillmentMode, truckAvailability]);
   const mixInput: SoilMixInput = useMemo(() => {
     const withBagEstimate = (components: readonly SoilMixComponent[]): SoilMixComponent[] => components.map((component) => ({
       ...component,
@@ -317,7 +392,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     ];
     return { templateId: 'custom', components: withBagEstimate(components) };
   }, [mix, customTopsoil, customCompost, customPotting, bagSize, bagUnit, bagPrice]);
-  const mixRows = useMemo(() => calculateSoilMix(bedResult.finalVolumeFt3, mixInput), [bedResult.finalVolumeFt3, mixInput]);
+  const mixRows = useMemo(() => calculateSoilMix(sourceVolume.finalVolumeFt3, mixInput), [sourceVolume.finalVolumeFt3, mixInput]);
   const mixTotalCost = mixRows.reduce((total, row) => total + (row.cost ?? 0), 0);
   const containerResult = useMemo(() => {
     if (containerMode === 'grow') return calculateGrowBagVolume({ gallons: growGallonsOne * growQtyOne + growGallonsTwo * growQtyTwo, quantity: 1 });
@@ -356,21 +431,25 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   }), [bagResult.totalCost, costKit, costCompost, costMulch, costHardware, deliveryFee, taxPercent, numberOfBeds, currency]);
 
   const symbol = currencySymbol(currency);
-  const activeVolume = tab === 'containers' ? containerResult : tab === 'topoff' ? topOffResult : tab === 'shapes' ? shapeResult : tab === 'multi' ? multiResult : bedResult;
+  const activeVolume = tab === 'containers' ? containerResult : tab === 'topoff' ? topOffResult : tab === 'shapes' ? shapeResult : tab === 'multi' ? multiResult : (tab === 'bags' || tab === 'bulk' || tab === 'mix') ? sourceVolume : bedResult;
   const activeBagResult = useMemo(() => calculateSoilBags(activeVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [activeVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
+  const activeBagLine = activeBagResult.canEstimateBags ? `${activeBagResult.bagsNeeded} × ${bagSize} ${bagUnit}` : 'Package volume required for weight-only bag labels';
+  const activeBagCostLine = activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBagResult.totalCost ?? 0)}` : 'Not estimated from lb/kg labels';
   const warnings = Array.from(new Map([...bedResult.warnings, ...activeBagResult.warnings, ...bulkResult.warnings, ...containerResult.warnings, ...mixRows.flatMap((row) => row.warnings), ...shapeResult.warnings, ...multiResult.warnings, ...multiContainerResult.warnings, ...costResult.warnings].map((warning) => [warningKey(warning), warning])).values());
   const validationMessages = [
     length <= 0 || width <= 0 || depth <= 0 ? 'Enter a length, width, and depth greater than zero.' : '',
     bagSize <= 0 ? 'Bag size must be greater than zero.' : '',
+    !activeBagResult.canEstimateBags ? 'Enter package volume from the label to estimate bags. Weight-only bag labels cannot be converted reliably.' : '',
+    bulkFulfillmentMode === 'pickup' && truckAvailability === 'notAvailable' ? 'Pickup selected without a truck or trailer. Delivery or bagged soil may be more practical.' : '',
     mix === 'custom' && customTopsoil + customCompost + customPotting !== 100 ? 'Custom soil mix percentages must add up to 100%.' : '',
     bulkResult.overbuyFt3 > activeVolume.finalVolumeFt3 && minimumOrder > bulkResult.requiredYd3 ? 'Your bulk minimum order is much larger than the required volume.' : '',
   ].filter(Boolean);
 
-  const shoppingList = `BedSoil shopping list\nActive tool: ${tab}\nSoil volume: ${fmt(activeVolume.finalVolumeFt3)} ft³ (${fmt(activeVolume.volumeYd3)} yd³ / ${fmt(activeVolume.volumeLiters)} L)\nBags: ${activeBagResult.bagsNeeded} × ${bagSize} ${bagUnit}\nEstimated bag cost: ${symbol}${fmt(activeBagResult.totalCost ?? 0)}\nBulk estimate: ${symbol}${fmt(bulkResult.bulkTotalCost)}\nProject cost estimate: ${symbol}${fmt(costResult.total)}\nMix estimate: ${mixRows.map((row) => `${row.name} ${fmt(row.volumeFt3)} ft³ / ${row.bagsNeeded ?? 0} bags`).join('; ')}\nMix bag cost estimate: ${symbol}${fmt(mixTotalCost)}\nTop-off compost: ${fmt(topOffMaterials.compostFt3)} ft³; optional mulch: ${fmt(topOffMaterials.optionalMulchFt3)} ft³\nWarnings:\n${warningsText(warnings)}`;
+  const shoppingList = `BedSoil shopping list\nActive tool: ${tab}\nSoil volume: ${fmt(activeVolume.finalVolumeFt3)} ft³ (${fmt(activeVolume.volumeYd3)} yd³ / ${fmt(activeVolume.volumeLiters)} L)\nBags: ${activeBagLine}\nEstimated bag cost: ${activeBagCostLine}\nBulk mode: ${bulkResult.fulfillmentMode}; service cost: ${symbol}${fmt(bulkResult.serviceCost)}; truck/trailer: ${bulkResult.truckAvailability}\nBulk estimate: ${symbol}${fmt(bulkResult.bulkTotalCost)}\nProject cost estimate: ${symbol}${fmt(costResult.total)}\nMix estimate: ${mixRows.map((row) => `${row.name} ${fmt(row.volumeFt3)} ft³ / ${row.bagsNeeded ?? 'label volume required'} bags`).join('; ')}\nMix bag cost estimate: ${symbol}${fmt(mixTotalCost)}\nTop-off compost: ${fmt(topOffMaterials.compostFt3)} ft³; optional mulch: ${fmt(topOffMaterials.optionalMulchFt3)} ft³\nWarnings:\n${warningsText(warnings)}`;
 
   function createShareUrl() {
     const params = new URLSearchParams({
-      tab, l: String(length), w: String(width), d: String(depth), lu: lengthUnit, wu: widthUnit, du: depthUnit, beds: String(numberOfBeds), free: String(freeboard), settle: String(settling), bagSize: String(bagSize), bagPrice: String(bagPrice), bu: bagUnit, bulkPrice: String(bulkPrice), delivery: String(deliveryFee), minOrder: String(minimumOrder), cur: currency, gridL: String(gridLength), gridW: String(gridWidth), topoff: String(topOffDepth), crop, shape: shapeMode, shapeA: String(shapeA), shapeB: String(shapeB), shapeC: String(shapeC), shapeD: String(shapeD), c1l: String(multiContainerLengthOne), c1w: String(multiContainerWidthOne), c1d: String(multiContainerDepthOne), c1q: String(multiContainerQtyOne), c2l: String(multiContainerLengthTwo), c2w: String(multiContainerWidthTwo), c2d: String(multiContainerDepthTwo), c2q: String(multiContainerQtyTwo),
+      tab, vs: volumeSource, mv: String(manualVolume), vu: manualVolumeUnit, l: String(length), w: String(width), d: String(depth), lu: lengthUnit, wu: widthUnit, du: depthUnit, beds: String(numberOfBeds), free: String(freeboard), settle: String(settling), bagSize: String(bagSize), bagPrice: String(bagPrice), bu: bagUnit, bulkPrice: String(bulkPrice), delivery: String(deliveryFee), pickupCost: String(pickupTripCost), minOrder: String(minimumOrder), fulfillment: bulkFulfillmentMode, truck: truckAvailability, cur: currency, gridL: String(gridLength), gridW: String(gridWidth), topoff: String(topOffDepth), crop, shape: shapeMode, shapeA: String(shapeA), shapeB: String(shapeB), shapeC: String(shapeC), shapeD: String(shapeD), c1l: String(multiContainerLengthOne), c1w: String(multiContainerWidthOne), c1d: String(multiContainerDepthOne), c1q: String(multiContainerQtyOne), c2l: String(multiContainerLengthTwo), c2w: String(multiContainerWidthTwo), c2d: String(multiContainerDepthTwo), c2q: String(multiContainerQtyTwo),
     });
     return `${window.location.origin}${window.location.pathname}?${params.toString()}#calculator`;
   }
@@ -404,7 +483,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
 
   function downloadCsv() {
     trackCalculatorEvent('download_csv', { tab });
-    const csv = ['item,value', `volume_ft3,${fmt(activeVolume.finalVolumeFt3)}`, `volume_yd3,${fmt(activeVolume.volumeYd3)}`, `bags,${activeBagResult.bagsNeeded}`, `bag_cost,${fmt(activeBagResult.totalCost ?? 0)}`, `bulk_cost,${fmt(bulkResult.bulkTotalCost)}`, `project_cost,${fmt(costResult.total)}`].join('\n');
+    const csv = ['item,value', `volume_ft3,${fmt(activeVolume.finalVolumeFt3)}`, `volume_yd3,${fmt(activeVolume.volumeYd3)}`, `bags,${activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'package volume required'}`, `bag_cost,${fmt(activeBagResult.totalCost ?? 0)}`, `bulk_cost,${fmt(bulkResult.bulkTotalCost)}`, `project_cost,${fmt(costResult.total)}`].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -473,9 +552,24 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   }
 
   return (
-    <section id="calculator" className="calculator-shell">
-      <div className="tabs" aria-label="Calculator tabs">
-        {(['raised', 'bags', 'bulk', 'mix', 'containers', 'spacing', 'topoff', 'depth', 'cost', 'multi', 'shapes'] as const).map((item) => (
+    <section id="calculator" className="calculator-shell workspace-shell">
+      <div className="workspace-header">
+        <div>
+          <p className="eyebrow">Interactive planner</p>
+          <h2>Soil, bags, mix, cost, and planting workspace</h2>
+          <p className="muted-card">Results update automatically. Use the focused result panel before buying materials.</p>
+        </div>
+        <span className="status-badge status-info">Planning estimate</span>
+      </div>
+
+      <div className="tabs primary-tabs" aria-label="Primary calculator tabs">
+        {(['raised', 'bags', 'bulk', 'mix', 'containers', 'spacing'] as const).map((item) => (
+          <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
+        ))}
+      </div>
+      <div className="tabs secondary-tabs" aria-label="More planning tools">
+        <span className="tab-label">More planners</span>
+        {(['topoff', 'depth', 'cost', 'multi', 'shapes'] as const).map((item) => (
           <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
         ))}
       </div>
@@ -489,7 +583,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       </div>
 
       <div className="calculator-grid">
-        <form className="input-grid" onSubmit={(event) => event.preventDefault()}>
+        <form className="input-grid control-panel" onSubmit={(event) => event.preventDefault()}>
           {tab === 'raised' && (
             <>
               <NumberInput label={`Length (${lengthUnit})`} value={length} setValue={setLength} step={0.25} />
@@ -501,11 +595,20 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               <NumberInput label="Number of beds" value={numberOfBeds} setValue={setNumberOfBeds} />
               <NumberInput label={`Freeboard (${depthUnit})`} value={freeboard} setValue={setFreeboard} step={0.5} />
               <NumberInput label="Settling allowance (%)" value={settling} setValue={setSettling} />
+              <div className="full-width small-buttons" aria-label="Settling allowance presets">
+                {[0, 10, 15].map((value) => <button type="button" key={value} className={settling === value ? 'active' : ''} onClick={() => setSettling(value)}>{value}% settling</button>)}
+              </div>
             </>
           )}
 
           {tab === 'bags' && (
             <>
+
+              <div className="full-width source-toggle" role="group" aria-label="Required volume source">
+                <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
+                <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
+              </div>
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
               <NumberInput label="Bag size" value={bagSize} setValue={setBagSize} step={0.1} />
               <SelectInput label="Bag unit" value={bagUnit} setValue={setBagUnit} options={bagUnitOptions} />
               <NumberInput label={`Bag price (${symbol})`} value={bagPrice} setValue={setBagPrice} step={0.5} />
@@ -515,17 +618,31 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
 
           {tab === 'bulk' && (
             <>
+
+              <div className="full-width source-toggle" role="group" aria-label="Required volume source">
+                <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
+                <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
+              </div>
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
               <NumberInput label="Bag size" value={bagSize} setValue={setBagSize} step={0.1} />
               <SelectInput label="Bag unit" value={bagUnit} setValue={setBagUnit} options={bagUnitOptions} />
               <NumberInput label={`Bag price (${symbol})`} value={bagPrice} setValue={setBagPrice} step={0.5} />
               <NumberInput label={`Bulk price / yd³ (${symbol})`} value={bulkPrice} setValue={setBulkPrice} />
               <NumberInput label={`Delivery fee (${symbol})`} value={deliveryFee} setValue={setDeliveryFee} />
               <NumberInput label="Minimum order (yd³)" value={minimumOrder} setValue={setMinimumOrder} step={0.25} />
+              <SelectInput label="Bulk fulfillment" value={bulkFulfillmentMode} setValue={setBulkFulfillmentMode} options={[{ label: 'Delivery', value: 'delivery' }, { label: 'Pickup / self-haul', value: 'pickup' }]} />
+              {bulkFulfillmentMode === 'pickup' ? <><NumberInput label={`Pickup trip cost (${symbol})`} value={pickupTripCost} setValue={setPickupTripCost} /><SelectInput label="Truck or trailer available" value={truckAvailability} setValue={setTruckAvailability} options={[{ label: 'Not sure yet', value: 'unknown' }, { label: 'Available', value: 'available' }, { label: 'Not available', value: 'notAvailable' }]} /></> : <p className="full-width muted-card">Delivery mode uses the delivery fee in the bulk total. Switch to pickup if you plan to self-haul.</p>}
             </>
           )}
 
           {tab === 'mix' && (
             <>
+
+              <div className="full-width source-toggle" role="group" aria-label="Required volume source">
+                <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
+                <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
+              </div>
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
               <label className="full-width"><span>Mix template</span><select value={mix} onChange={(event) => setMix(event.target.value as keyof typeof SOIL_MIX_TEMPLATES | 'custom')}><option value="basic">Basic raised bed mix 60/30/10</option><option value="soilless">Compost + soilless mix 50/50</option><option value="melsMix">Mel&apos;s Mix style</option><option value="budgetFill">Budget fill</option><option value="custom">Custom ratio</option></select></label>
               {mix === 'custom' ? <><NumberInput label="Topsoil %" value={customTopsoil} setValue={setCustomTopsoil} /><NumberInput label="Compost %" value={customCompost} setValue={setCustomCompost} /><NumberInput label="Potting / aeration %" value={customPotting} setValue={setCustomPotting} /><p className="full-width muted-card">Custom total: {customTopsoil + customCompost + customPotting}%. It must equal 100%.</p></> : null}
             </>
@@ -566,6 +683,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               <NumberInput label={`Length (${lengthUnit})`} value={length} setValue={setLength} />
               <NumberInput label={`Width (${widthUnit})`} value={width} setValue={setWidth} />
               <NumberInput label={`Top-off depth (${depthUnit})`} value={topOffDepth} setValue={setTopOffDepth} step={0.5} />
+              <div className="full-width small-buttons" aria-label="Top-off depth presets">{[1, 2, 3].map((value) => <button type="button" key={value} className={topOffDepth === value ? 'active' : ''} onClick={() => setTopOffDepth(value)}>{value} {depthUnit}</button>)}</div>
               <NumberInput label="Number of beds" value={numberOfBeds} setValue={setNumberOfBeds} />
             </>
           )}
@@ -621,46 +739,65 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               {shapeMode !== 'round' ? <NumberInput label={shapeMode === 'lShape' ? 'Cutout width (ft)' : 'Inner opening width (ft)'} value={shapeD} setValue={setShapeD} /> : null}
               <NumberInput label="Depth (in)" value={depth} setValue={setDepth} />
               <NumberInput label="Quantity" value={numberOfBeds} setValue={setNumberOfBeds} />
+              <div className="full-width small-buttons" aria-label="Settling allowance presets">{[0, 10, 15].map((value) => <button type="button" key={value} className={settling === value ? 'active' : ''} onClick={() => setSettling(value)}>{value}% settling</button>)}</div>
             </>
           )}
 
-          <button className="primary full-width" type="button">Calculate</button>
+          <p className="full-width auto-status"><span className="status-badge status-success">Live calculation</span> Results update as inputs change.</p>
         </form>
 
-        <aside className="result-panel" aria-live="polite">
-          <h2>Result</h2>
-          <div className="metric"><span>Base cubic feet</span><strong>{fmt(activeVolume.baseVolumeFt3)}</strong></div>
-          <div className="metric"><span>Final cubic feet</span><strong>{fmt(activeVolume.finalVolumeFt3)}</strong></div>
-          <div className="metric"><span>Cubic yards</span><strong>{fmt(activeVolume.volumeYd3)}</strong></div>
-          <div className="metric"><span>Liters</span><strong>{fmt(activeVolume.volumeLiters)}</strong></div>
-          <div className="metric"><span>Dry quarts</span><strong>{fmt(activeVolume.volumeDryQuarts)}</strong></div>
-          <div className="metric"><span>Gallons</span><strong>{fmt(activeVolume.volumeGallons)}</strong></div>
-          <div className="metric"><span>Bags needed</span><strong>{activeBagResult.bagsNeeded}</strong></div>
-          <div className="metric"><span>Leftover bag volume</span><strong>{fmt(activeBagResult.leftoverFt3)} ft³</strong></div>
-          <div className="metric"><span>Bag cost</span><strong>{symbol}{fmt(activeBagResult.totalCost ?? 0)}</strong></div>
-          <div className="metric"><span>Bulk estimate</span><strong>{symbol}{fmt(bulkResult.bulkTotalCost)}</strong></div>
-          <div className="metric"><span>Project total</span><strong>{symbol}{fmt(costResult.total)}</strong></div>
-          <div className="metric"><span>Bulk recommendation</span><strong>{bulkResult.recommendation}</strong></div>
-          <div className="metric"><span>Required bulk volume</span><strong>{fmt(bulkResult.requiredYd3)} yd³</strong></div>
-          <div className="metric"><span>Adjusted bulk order</span><strong>{fmt(bulkResult.bulkOrderYd3)} yd³</strong></div>
-          <div className="metric"><span>Bulk overbuy</span><strong>{fmt(bulkResult.overbuyFt3)} ft³</strong></div>
-          <div className="metric"><span>Bag cost / ft³</span><strong>{symbol}{fmt(bulkResult.bagCostPerFt3)}</strong></div>
-          <div className="metric"><span>Bulk cost / ft³</span><strong>{symbol}{fmt(bulkResult.bulkCostPerFt3)}</strong></div>
-          <div className="metric"><span>Bulk savings</span><strong>{symbol}{fmt(bulkResult.savings)}</strong></div>
+        <aside className="result-panel result-focus" aria-live="polite">
+          <div className="result-topline">
+            <div>
+              <p className="eyebrow">Focused result</p>
+              <h2>{tab === 'spacing' ? 'Planting space estimate' : tab === 'depth' ? 'Depth suitability' : tab === 'cost' ? 'Project cost estimate' : 'Soil volume estimate'}</h2>
+            </div>
+            <span className="status-badge status-success">Updated</span>
+          </div>
 
-          <div className="mini-table"><h3>Mix breakdown</h3>{mixRows.map((row) => <div key={row.componentId}><span>{row.name}</span><strong>{fmt(row.volumeFt3)} ft³ · {row.bagsNeeded ?? 0} bags · {symbol}{fmt(row.cost ?? 0)}</strong></div>)}<div><span>Estimated mix bag cost</span><strong>{symbol}{fmt(mixTotalCost)}</strong></div></div>
+          <div className="main-result-card">
+            <span>{tab === 'spacing' ? `${spacingResult.totalSquares} sq ft grid` : tab === 'depth' ? `Status: ${depthResult.status}` : tab === 'cost' ? `${symbol}${fmt(costResult.total)}` : `${fmt(activeVolume.finalVolumeFt3)} ft³`}</span>
+            <strong>{tab === 'spacing' ? `${plantText(spacingResult.totalPlants)} plants` : tab === 'depth' ? depthResult.message : tab === 'cost' ? `${symbol}${fmt(costResult.costPerBed)} per bed` : `${fmt(activeVolume.volumeYd3)} yd³ · ${fmt(activeVolume.volumeLiters)} L`}</strong>
+            <p>{tab === 'bags' || tab === 'bulk' || tab === 'mix' ? `Volume source: ${volumeSource === 'manual' ? `${manualVolume} ${manualVolumeUnit}` : 'raised bed dimensions'}.` : 'Results are planning estimates and should be checked against product labels and local conditions.'}</p>
+          </div>
+
+          <div className="result-card-grid">
+            <div className="result-card"><span>Bags needed</span><strong>{activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'Volume needed'}</strong><small>{activeBagResult.canEstimateBags ? `${bagSize} ${bagUnit} · leftover ${fmt(activeBagResult.leftoverFt3)} ft³` : 'Use package ft³, dry qt, L, or gal instead of lb/kg.'}</small></div>
+            <div className="result-card"><span>Bag cost</span><strong>{activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBagResult.totalCost ?? 0)}` : 'Not estimated'}</strong><small>{activeBagResult.canEstimateBags ? `${symbol}${fmt(bulkResult.bagCostPerFt3)} per ft³` : 'Weight-only bags need a volume label.'}</small></div>
+            <div className="result-card"><span>Bulk order</span><strong>{fmt(bulkResult.bulkOrderYd3)} yd³</strong><small>{symbol}{fmt(bulkResult.bulkTotalCost)} · {bulkResult.fulfillmentMode} · {fmt(bulkResult.overbuyFt3)} ft³ extra</small></div>
+            <div className="result-card"><span>Cost signal</span><strong>{bulkResult.recommendation}</strong><small>Savings vs bags: {symbol}{fmt(bulkResult.savings)}</small></div>
+          </div>
+
+          <div className="metric-group" aria-label="Volume conversions">
+            <h3>Volume conversions</h3>
+            <div className="metric"><span>Base cubic feet</span><strong>{fmt(activeVolume.baseVolumeFt3)}</strong></div>
+            <div className="metric"><span>Final cubic feet</span><strong>{fmt(activeVolume.finalVolumeFt3)}</strong></div>
+            <div className="metric"><span>Cubic yards</span><strong>{fmt(activeVolume.volumeYd3)}</strong></div>
+            <div className="metric"><span>Dry quarts</span><strong>{fmt(activeVolume.volumeDryQuarts)}</strong></div>
+            <div className="metric"><span>Gallons</span><strong>{fmt(activeVolume.volumeGallons)}</strong></div>
+          </div>
+
+          <div className="mini-table result-section"><h3>Mix breakdown</h3>{mixRows.map((row) => <div key={row.componentId}><span>{row.name}</span><strong>{fmt(row.volumeFt3)} ft³ · {row.bagsNeeded ?? 'label volume required'} bags · {symbol}{fmt(row.cost ?? 0)}</strong></div>)}<div><span>Estimated mix bag cost</span><strong>{symbol}{fmt(mixTotalCost)}</strong></div></div>
           {tab === 'containers' ? <p className="callout">Container volume: <b>{fmt(containerResult.finalVolumeFt3)} ft³</b> / {fmt(containerResult.volumeLiters)} L</p> : null}
           {tab === 'multi' ? <p className="callout">Multiple beds: <b>{fmt(multiResult.finalVolumeFt3)} ft³</b>. Multiple containers: <b>{fmt(multiContainerResult.finalVolumeFt3)} ft³</b>.</p> : null}
           {tab === 'topoff' ? <p className="callout">Annual top-off need: <b>{fmt(topOffResult.finalVolumeFt3)} ft³</b>. Compost planning amount: <b>{fmt(topOffMaterials.compostFt3)} ft³</b>. Optional mulch estimate: <b>{fmt(topOffMaterials.optionalMulchFt3)} ft³</b>.</p> : null}
           {tab === 'spacing' ? <><p className="callout">{spacingResult.totalSquares} squares × {plantText(spacingResult.plantsPerSquareFoot)} plants per square = <b>{plantText(spacingResult.totalPlants)} plants</b></p><SquareFootGridPreview lengthFt={gridLength} widthFt={gridWidth} cropLabel={spacingResult.crop?.name ?? 'custom crop'} /></> : null}
-          {tab === 'depth' ? <p className="callout"><b>Status: {depthResult.status}</b>. {depthResult.message}</p> : null}
+          {tab === 'depth' ? <p className={`callout status-callout status-${depthResult.status === 'good' ? 'success' : depthResult.status === 'borderline' ? 'warning' : 'danger'}`}><b>Status: {depthResult.status}</b>. {depthResult.message}</p> : null}
           {tab === 'shapes' ? <p className="callout">Shape estimate: <b>{fmt(shapeResult.finalVolumeFt3)} ft³</b>. Use as an approximation for non-rectangular beds.</p> : null}
           {tab === 'cost' ? <p className="callout">Estimated project cost: <b>{symbol}{fmt(costResult.total)}</b>, or {symbol}{fmt(costResult.costPerBed)} per bed.</p> : null}
 
+          <div className="assumption-strip">
+            <span>Settling: {settling}%</span>
+            <span>Freeboard: {freeboard} {depthUnit}</span>
+            <span>Bag: {bagSize} {bagUnit}</span>
+            <span>Bulk minimum: {minimumOrder} yd³</span>
+            <span>Bulk mode: {bulkResult.fulfillmentMode}</span>
+          </div>
+
           <h3>Shopping list</h3>
           <pre>{shoppingList}</pre>
-          <div className="button-row">
-            <button type="button" onClick={copyShoppingList}>{copied ? 'Copied' : 'Copy shopping list'}</button>
+          <div className="button-row action-row">
+            <button type="button" className="primary" onClick={copyShoppingList}>{copied ? 'Copied' : 'Copy shopping list'}</button>
             <button type="button" onClick={printResult}>Print / save as PDF</button>
             <button type="button" onClick={downloadText}>Download TXT</button>
             <button type="button" onClick={downloadCsv}>Download CSV</button>
@@ -669,8 +806,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             <button type="button" onClick={copyShareUrl}>{shared ? 'URL copied' : 'Copy share URL'}</button>
           </div>
           {validationMessages.length > 0 ? <ul className="warning-list validation-list">{validationMessages.map((message) => <li key={message}><b>Check:</b> {message}</li>)}</ul> : null}
-          {warnings.length > 0 ? <ul className="warning-list">{warnings.map((warning) => <li key={warningKey(warning)}><b>{warning.severity}:</b> {warning.message}</li>)}</ul> : null}
-          <AdSlot placement="result" />
+          {warnings.length > 0 ? <ul className="warning-list">{warnings.map((warning) => <li className={`warning-item severity-${warning.severity}`} key={warningKey(warning)}><b>{warning.severity}:</b> {warning.message}</li>)}</ul> : null}
         </aside>
       </div>
     </section>

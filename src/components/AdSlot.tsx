@@ -1,9 +1,7 @@
-export function AdSlot({ placement }: { placement: 'result' | 'faq' | 'sidebar' }) {
-  const label = placement === 'result'
-    ? 'Advertisement placeholder below the result area'
-    : placement === 'faq'
-      ? 'Advertisement placeholder in the FAQ middle'
-      : 'Advertisement placeholder in the desktop sidebar';
+export function AdSlot({ placement }: { placement: 'faq' | 'sidebar' }) {
+  const label = placement === 'faq'
+    ? 'Advertisement area placed between FAQ questions'
+    : 'Advertisement area in the desktop sidebar, separated from calculator controls';
 
   return <div className={`ad-slot ${placement === 'sidebar' ? 'ad-sidebar' : ''}`} aria-label={label}>{label}</div>;
 }

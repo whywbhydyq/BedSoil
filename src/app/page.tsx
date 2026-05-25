@@ -24,7 +24,7 @@ const related = [
   'container-soil-calculator',
   'grow-bag-soil-calculator',
   'square-foot-garden-spacing-calculator',
-  '4x8-planting-layout',
+  '4x8-raised-bed-planting-layout',
   'annual-raised-bed-top-off-calculator',
   'raised-bed-depth-calculator',
   'raised-bed-cost-estimator',
