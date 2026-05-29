@@ -7,10 +7,10 @@ import './globals.css';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'BedSoil - Raised Bed Soil Calculator',
+    default: 'Raised Bed Soil Calculator - BedSoil',
     template: '%s | BedSoil',
   },
-  description: 'Raised bed soil, bag, bulk cost, soil mix, grow bag, annual top-off, depth, and square foot planting calculators.',
+  description: 'Calculate how much soil you need for raised garden beds by length, width, depth, bag size, and unit. Estimate cubic feet, cubic yards, liters, and bag count.',
   openGraph: {
     siteName: 'BedSoil',
     type: 'website',

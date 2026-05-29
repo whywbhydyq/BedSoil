@@ -93,9 +93,20 @@ export const legalPages: PageDefinition[] = [
 export const allPages = [...calculatorPages, ...legalPages];
 
 export function pageMetadata(page: PageDefinition): Metadata {
+  const overrides: Record<string, readonly [string, string]> = {
+    'raised-bed-soil-calculator': [
+      'Raised Bed Soil Calculator',
+      'Calculate how much soil you need for raised garden beds by length, width, depth, bag size, and unit. Estimate cubic feet, cubic yards, liters, and bag count.',
+    ],
+    '4x8-raised-bed-soil-calculator': [
+      '4x8 Raised Bed Soil Calculator',
+      'Calculate soil volume and bag count for a 4x8 raised garden bed at 6, 8, 10, 12, 18, or 24 inch depth.',
+    ],
+  };
+  const override = overrides[page.slug];
   return {
-    title: page.title,
-    description: page.description,
+    title: override?.[0] ?? page.title,
+    description: override?.[1] ?? page.description,
     alternates: {
       canonical: `/${page.slug}`,
     },
