@@ -12,6 +12,11 @@ export const GALLONS_PER_FT3 = 7.48051948;
 export const FT3_PER_GALLON = 0.133680556;
 export const CUBIC_INCHES_PER_FT3 = 1728;
 
+export function safeNonNegativeNumber(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, value);
+}
+
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   USD: '$',
   CAD: 'C$',
@@ -25,7 +30,8 @@ export function currencySymbol(currency: CurrencyCode): string {
 }
 
 export function lengthToFeet(value: number, unit: LengthUnit): number {
-  if (!Number.isFinite(value)) return 0;
+  value = safeNonNegativeNumber(value);
+  if (value === 0) return 0;
   switch (unit) {
     case 'ft': return value;
     case 'in': return value / 12;
@@ -35,7 +41,8 @@ export function lengthToFeet(value: number, unit: LengthUnit): number {
 }
 
 export function volumeToFt3(value: number, unit: VolumeUnit | BagUnit): number {
-  if (!Number.isFinite(value) || value <= 0) return 0;
+  value = safeNonNegativeNumber(value);
+  if (value === 0) return 0;
   switch (unit) {
     case 'ft3': return value;
     case 'yd3': return value * FT3_PER_YD3;
@@ -48,10 +55,10 @@ export function volumeToFt3(value: number, unit: VolumeUnit | BagUnit): number {
   }
 }
 
-export function ft3ToYd3(value: number): number { return value / FT3_PER_YD3; }
-export function ft3ToLiters(value: number): number { return value * LITERS_PER_FT3; }
-export function ft3ToDryQuarts(value: number): number { return value * DRY_QUARTS_PER_FT3; }
-export function ft3ToGallons(value: number): number { return value * GALLONS_PER_FT3; }
+export function ft3ToYd3(value: number): number { return safeNonNegativeNumber(value) / FT3_PER_YD3; }
+export function ft3ToLiters(value: number): number { return safeNonNegativeNumber(value) * LITERS_PER_FT3; }
+export function ft3ToDryQuarts(value: number): number { return safeNonNegativeNumber(value) * DRY_QUARTS_PER_FT3; }
+export function ft3ToGallons(value: number): number { return safeNonNegativeNumber(value) * GALLONS_PER_FT3; }
 
 export interface VolumeResult {
   baseVolumeFt3: number;
@@ -64,13 +71,15 @@ export interface VolumeResult {
 }
 
 export function makeVolumeResult(baseVolumeFt3: number, finalVolumeFt3 = baseVolumeFt3, warnings: CalculatorWarning[] = []): VolumeResult {
+  const safeBaseVolumeFt3 = safeNonNegativeNumber(baseVolumeFt3);
+  const safeFinalVolumeFt3 = safeNonNegativeNumber(finalVolumeFt3);
   return {
-    baseVolumeFt3,
-    finalVolumeFt3,
-    volumeYd3: ft3ToYd3(finalVolumeFt3),
-    volumeLiters: ft3ToLiters(finalVolumeFt3),
-    volumeDryQuarts: ft3ToDryQuarts(finalVolumeFt3),
-    volumeGallons: ft3ToGallons(finalVolumeFt3),
+    baseVolumeFt3: safeBaseVolumeFt3,
+    finalVolumeFt3: safeFinalVolumeFt3,
+    volumeYd3: ft3ToYd3(safeFinalVolumeFt3),
+    volumeLiters: ft3ToLiters(safeFinalVolumeFt3),
+    volumeDryQuarts: ft3ToDryQuarts(safeFinalVolumeFt3),
+    volumeGallons: ft3ToGallons(safeFinalVolumeFt3),
     warnings,
   };
 }

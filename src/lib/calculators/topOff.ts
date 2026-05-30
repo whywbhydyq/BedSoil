@@ -14,7 +14,7 @@ export function calculateAnnualTopOff(input: AnnualTopOffInput) {
   const volumeFt3 = lengthToFeet(input.length, input.lengthUnit)
     * lengthToFeet(input.width, input.widthUnit)
     * lengthToFeet(input.topOffDepth, input.topOffDepthUnit)
-    * Math.max(1, Math.floor(input.numberOfBeds || 1));
+    * Math.max(0, Math.floor(Number.isFinite(input.numberOfBeds) ? input.numberOfBeds : 0));
   return makeVolumeResult(volumeFt3);
 }
 

@@ -31,10 +31,12 @@ import {
   estimateRaisedBedProjectCost,
   type SoilMixInput,
   type SoilMixComponent,
+  type MixBreakdownResult,
   lengthToFeet,
   volumeToFt3,
   type CalculatorWarning,
 } from '@/lib/calculators';
+import { AdSlot } from '@/components/AdSlot';
 import { BAG_PRESETS, RAISED_BED_PRESETS, SOIL_MIX_TEMPLATES } from '@/lib/data/presets';
 import { fmt, plantText } from '@/lib/utils/format';
 
@@ -43,18 +45,25 @@ type ContainerMode = 'grow' | 'rect' | 'round' | 'taper';
 type ShapeMode = 'round' | 'lShape' | 'uShape';
 type UnitPreset = 'us' | 'metric';
 type VolumeSource = 'bed' | 'manual';
+type FieldChangeEvent = { target: { value: string } };
+type FormSubmitEvent = { preventDefault: () => void };
+
+function safeNonNegativeNumber(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, value);
+}
 
 function NumberInput({ label, value, setValue, step = 1 }: { label: string; value: number; setValue: (value: number) => void; step?: number }) {
   return (
     <label>
       <span>{label}</span>
-      <input type="number" inputMode="decimal" min={0} step={step} value={Number.isFinite(value) ? value : 0} onChange={(event) => setValue(Number(event.target.value))} />
+      <input type="number" inputMode="decimal" min={0} step={step} value={Number.isFinite(value) ? value : 0} onChange={(event: FieldChangeEvent) => setValue(safeNonNegativeNumber(Number(event.target.value)))} />
     </label>
   );
 }
 
 function SelectInput<T extends string>({ label, value, setValue, options }: { label: string; value: T; setValue: (value: T) => void; options: readonly { label: string; value: T }[] }) {
-  return <label><span>{label}</span><select value={value} onChange={(event) => setValue(event.target.value as T)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  return <label><span>{label}</span><select value={value} onChange={(event: FieldChangeEvent) => setValue(event.target.value as T)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
 function warningKey(warning: CalculatorWarning) {
@@ -65,6 +74,46 @@ function warningsText(warnings: CalculatorWarning[]) {
   return warnings.map((warning) => `[${warning.severity}] ${warning.message}`).join('\n');
 }
 
+
+async function writeClipboardText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the textarea fallback for restricted clipboard contexts.
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function csvValue(value: string | number): string {
+  const raw = typeof value === 'number' ? (Number.isFinite(value) ? String(Number(value.toFixed(4))) : '0') : value;
+  return /[",\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+}
+
+
+
+function recommendationLabel(value: 'bulk' | 'bags' | 'tie' | 'notComparable'): string {
+  if (value === 'notComparable') return 'Need comparable inputs';
+  if (value === 'bulk') return 'Bulk may be cheaper';
+  if (value === 'bags') return 'Bags may be cheaper';
+  return 'Similar cost';
+}
 
 function roundInput(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;
@@ -107,15 +156,25 @@ function trackCalculatorEvent(name: string, payload: Record<string, string | num
 }
 
 function SquareFootGridPreview({ lengthFt, widthFt, cropLabel }: { lengthFt: number; widthFt: number; cropLabel: string }) {
-  const cols = Math.max(1, Math.min(12, Math.floor(lengthFt)));
-  const rows = Math.max(1, Math.min(12, Math.floor(widthFt)));
-  const total = cols * rows;
+  const actualCols = Math.max(0, Math.floor(Number.isFinite(lengthFt) ? lengthFt : 0));
+  const actualRows = Math.max(0, Math.floor(Number.isFinite(widthFt) ? widthFt : 0));
+  if (actualCols === 0 || actualRows === 0) {
+    return (
+      <div className="layout-preview empty-preview" aria-label="Square-foot planting grid needs positive dimensions">
+        <p className="muted-card">Enter grid length and width above zero to preview square-foot cells for {cropLabel}.</p>
+      </div>
+    );
+  }
+  const displayCols = Math.min(12, actualCols);
+  const displayRows = Math.min(12, actualRows);
+  const total = displayCols * displayRows;
+  const isCapped = displayCols !== actualCols || displayRows !== actualRows;
   return (
-    <div className="layout-preview" aria-label={`${cols} by ${rows} square-foot planting grid`}>
-      <div className="layout-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(28px, 1fr))` }}>
+    <div className="layout-preview" aria-label={`${actualCols} by ${actualRows} square-foot planting grid`}>
+      <div className="layout-grid" style={{ gridTemplateColumns: `repeat(${displayCols}, minmax(28px, 1fr))` }}>
         {Array.from({ length: total }, (_, index) => <span key={index}>{index + 1}</span>)}
       </div>
-      <p className="muted-card">Printable square-foot layout preview for {cropLabel}. Each cell represents 1 sq ft.</p>
+      <p className="muted-card">Printable square-foot layout preview for {cropLabel}. {isCapped ? `Preview is capped at ${displayCols} × ${displayRows} cells; calculation still uses ${actualCols} × ${actualRows} squares.` : 'Each cell represents 1 sq ft.'}</p>
     </div>
   );
 }
@@ -198,6 +257,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   const [shapeMode, setShapeMode] = useState<ShapeMode>('round');
   const [shapeA, setShapeA] = useState(6);
   const [shapeB, setShapeB] = useState(4);
+  const [shapeDepth, setShapeDepth] = useState(12);
   const [shapeC, setShapeC] = useState(2);
   const [shapeD, setShapeD] = useState(2);
   const [costKit, setCostKit] = useState(180);
@@ -228,6 +288,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     if (!slug) return;
     const sizeMatch = slug.match(/^(\d+)x(\d+)-raised-bed-soil-calculator$/);
     if (sizeMatch) {
+      setUnitPreset('us');
       setLength(Number(sizeMatch[1]));
       setWidth(Number(sizeMatch[2]));
       setDepth(12);
@@ -250,17 +311,17 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     if (slug === 'cucumber-spacing-raised-bed') setCrop('cucumber');
     if (slug === 'basil-spacing-square-foot-garden') setCrop('basil');
     if (slug.endsWith('spacing-raised-bed') || slug.endsWith('spacing-square-foot-garden')) { setTab('spacing'); setGridLength(4); setGridWidth(8); }
-    if (slug === 'round-raised-bed-soil-calculator') { setShapeMode('round'); setShapeA(6); setDepth(12); setTab('shapes'); }
-    if (slug === 'l-shaped-raised-bed-soil-calculator') { setShapeMode('lShape'); setShapeA(8); setShapeB(6); setShapeC(4); setShapeD(3); setDepth(12); setTab('shapes'); }
-    if (slug === 'u-shaped-raised-bed-soil-calculator') { setShapeMode('uShape'); setShapeA(8); setShapeB(6); setShapeC(4); setShapeD(3); setDepth(12); setTab('shapes'); }
+    if (slug === 'round-raised-bed-soil-calculator') { setShapeMode('round'); setShapeA(6); setShapeDepth(12); setTab('shapes'); }
+    if (slug === 'l-shaped-raised-bed-soil-calculator') { setShapeMode('lShape'); setShapeA(8); setShapeB(6); setShapeC(4); setShapeD(3); setShapeDepth(12); setTab('shapes'); }
+    if (slug === 'u-shaped-raised-bed-soil-calculator') { setShapeMode('uShape'); setShapeA(8); setShapeB(6); setShapeC(4); setShapeD(3); setShapeDepth(12); setTab('shapes'); }
     if (slug === 'spring-raised-bed-checklist') { setTopOffDepth(2); setTab('topoff'); }
     if (slug === 'fall-raised-bed-soil-checklist') { setTopOffDepth(1); setTab('topoff'); }
     if (slug === 'grow-bag-soil-calculator') { setContainerMode('grow'); setTab('containers'); }
     if (slug === 'container-soil-calculator') { setContainerMode('rect'); setTab('containers'); }
-    if (slug === 'how-much-soil-for-4x8-raised-bed') { setLength(4); setWidth(8); setDepth(12); setTab('raised'); }
+    if (slug === 'how-much-soil-for-4x8-raised-bed') { setUnitPreset('us'); setLength(4); setWidth(8); setDepth(12); setLengthUnit('ft'); setWidthUnit('ft'); setDepthUnit('in'); setTab('raised'); }
     const fourByEightDepthMatch = slug.match(/^4x8-raised-bed-(6|8|10|12|18|24)-inches-soil$/);
-    if (fourByEightDepthMatch) { setLength(4); setWidth(8); setDepth(Number(fourByEightDepthMatch[1])); setTab('raised'); }
-    if (slug === 'raised-bed-cubic-feet-calculator') { setLength(4); setWidth(8); setDepth(12); setTab('raised'); }
+    if (fourByEightDepthMatch) { setUnitPreset('us'); setLength(4); setWidth(8); setDepth(Number(fourByEightDepthMatch[1])); setLengthUnit('ft'); setWidthUnit('ft'); setDepthUnit('in'); setTab('raised'); }
+    if (slug === 'raised-bed-cubic-feet-calculator') { setUnitPreset('us'); setLength(4); setWidth(8); setDepth(12); setLengthUnit('ft'); setWidthUnit('ft'); setDepthUnit('in'); setTab('raised'); }
     if (slug === 'how-many-bags-of-soil-for-raised-bed') { setVolumeSource('manual'); setManualVolume(32); setManualVolumeUnit('ft3'); setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
     if (slug === 'cubic-yards-to-soil-bags-calculator') { setVolumeSource('manual'); setManualVolume(1); setManualVolumeUnit('yd3'); setBagSize(2); setBagUnit('ft3'); setTab('bags'); }
     if (slug === 'liters-to-cubic-feet-soil-calculator') { setVolumeSource('manual'); setManualVolume(200); setManualVolumeUnit('liter'); setBagSize(50); setBagUnit('liter'); setUnitPreset('metric'); setTab('bags'); }
@@ -291,14 +352,20 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       const numericSetters: [string, (value: number) => void][] = [
         ['l', setLength], ['w', setWidth], ['d', setDepth], ['beds', setNumberOfBeds], ['free', setFreeboard], ['settle', setSettling],
         ['bagSize', setBagSize], ['bagPrice', setBagPrice], ['mv', setManualVolume], ['bulkPrice', setBulkPrice], ['delivery', setDeliveryFee], ['pickupCost', setPickupTripCost], ['minOrder', setMinimumOrder],
+        ['ctop', setCustomTopsoil], ['ccomp', setCustomCompost], ['cpot', setCustomPotting],
+        ['g1gal', setGrowGallonsOne], ['g1qty', setGrowQtyOne], ['g2gal', setGrowGallonsTwo], ['g2qty', setGrowQtyTwo],
+        ['contL', setContainerLength], ['contW', setContainerWidth], ['contD', setContainerDepth], ['bottomD', setBottomDiameter], ['contQty', setContainerQty],
         ['gridL', setGridLength], ['gridW', setGridWidth], ['topoff', setTopOffDepth],
-        ['shapeA', setShapeA], ['shapeB', setShapeB], ['shapeC', setShapeC], ['shapeD', setShapeD],
+        ['shapeA', setShapeA], ['shapeB', setShapeB], ['shapeC', setShapeC], ['shapeD', setShapeD], ['shapeDepth', setShapeDepth],
+        ['costKit', setCostKit], ['costCompost', setCostCompost], ['costMulch', setCostMulch], ['costHardware', setCostHardware], ['tax', setTaxPercent],
+        ['m2l', setMultiLengthTwo], ['m2w', setMultiWidthTwo], ['m2d', setMultiDepthTwo], ['m2q', setMultiQtyTwo],
+        ['m3l', setMultiLengthThree], ['m3w', setMultiWidthThree], ['m3d', setMultiDepthThree], ['m3q', setMultiQtyThree],
         ['c1l', setMultiContainerLengthOne], ['c1w', setMultiContainerWidthOne], ['c1d', setMultiContainerDepthOne], ['c1q', setMultiContainerQtyOne],
         ['c2l', setMultiContainerLengthTwo], ['c2w', setMultiContainerWidthTwo], ['c2d', setMultiContainerDepthTwo], ['c2q', setMultiContainerQtyTwo],
       ];
       numericSetters.forEach(([key, setter]) => {
         const raw = params.get(key);
-        if (raw !== null && Number.isFinite(Number(raw))) setter(Number(raw));
+        if (raw !== null && Number.isFinite(Number(raw))) setter(safeNonNegativeNumber(Number(raw)));
       });
       const lu = params.get('lu') as LengthUnit | null;
       const wu = params.get('wu') as LengthUnit | null;
@@ -307,14 +374,20 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       const vu = params.get('vu') as VolumeUnit | null;
       const vs = params.get('vs') as VolumeSource | null;
       const cur = params.get('cur') as CurrencyCode | null;
+      const nextUnitPreset = params.get('up') as UnitPreset | null;
       const nextCrop = params.get('crop');
       const nextShape = params.get('shape') as ShapeMode | null;
       const nextFulfillment = params.get('fulfillment') as BulkFulfillmentMode | null;
       const nextTruck = params.get('truck') as TruckAvailability | null;
+      const nextMix = params.get('mix') as keyof typeof SOIL_MIX_TEMPLATES | 'custom' | null;
+      const nextContainerMode = params.get('container') as ContainerMode | null;
       if (nextCrop && CROPS.some((item) => item.id === nextCrop)) setCrop(nextCrop);
       if (nextShape && ['round', 'lShape', 'uShape'].includes(nextShape)) setShapeMode(nextShape);
       if (nextFulfillment && ['delivery', 'pickup'].includes(nextFulfillment)) setBulkFulfillmentMode(nextFulfillment);
       if (nextTruck && ['unknown', 'available', 'notAvailable'].includes(nextTruck)) setTruckAvailability(nextTruck);
+      if (nextMix && (nextMix === 'custom' || Object.keys(SOIL_MIX_TEMPLATES).includes(nextMix))) setMix(nextMix);
+      if (nextContainerMode && ['grow', 'rect', 'round', 'taper'].includes(nextContainerMode)) setContainerMode(nextContainerMode);
+      if (nextUnitPreset && ['us', 'metric'].includes(nextUnitPreset)) setUnitPreset(nextUnitPreset);
       if (lu && ['ft', 'in', 'cm', 'm'].includes(lu)) setLengthUnit(lu);
       if (wu && ['ft', 'in', 'cm', 'm'].includes(wu)) setWidthUnit(wu);
       if (du && ['ft', 'in', 'cm', 'm'].includes(du)) setDepthUnit(du);
@@ -332,6 +405,8 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       setLength(convertLengthInput(length, lengthUnit, 'cm'));
       setWidth(convertLengthInput(width, widthUnit, 'cm'));
       setDepth(convertLengthInput(depth, depthUnit, 'cm'));
+      setFreeboard(convertLengthInput(freeboard, depthUnit, 'cm'));
+      setTopOffDepth(convertLengthInput(topOffDepth, depthUnit, 'cm'));
       setLengthUnit('cm');
       setWidthUnit('cm');
       setDepthUnit('cm');
@@ -345,6 +420,8 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       setLength(convertLengthInput(length, lengthUnit, 'ft'));
       setWidth(convertLengthInput(width, widthUnit, 'ft'));
       setDepth(convertLengthInput(depth, depthUnit, 'in'));
+      setFreeboard(convertLengthInput(freeboard, depthUnit, 'in'));
+      setTopOffDepth(convertLengthInput(topOffDepth, depthUnit, 'in'));
       setLengthUnit('ft');
       setWidthUnit('ft');
       setDepthUnit('in');
@@ -375,8 +452,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     return makeVolumeResult(volumeFt3, volumeFt3, []);
   }, [manualVolume, manualVolumeUnit]);
   const sourceVolume = (tab === 'bags' || tab === 'bulk' || tab === 'mix') && volumeSource === 'manual' ? manualVolumeResult : bedResult;
-  const bagResult = useMemo(() => calculateSoilBags(sourceVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [sourceVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
-  const bulkResult = useMemo(() => compareBulkVsBags(sourceVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }, { pricePerCubicYard: bulkPrice, deliveryFee, pickupTripCost, minimumOrderYards: minimumOrder, fulfillmentMode: bulkFulfillmentMode, truckAvailability, currency }), [sourceVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency, bulkPrice, deliveryFee, pickupTripCost, minimumOrder, bulkFulfillmentMode, truckAvailability]);
   const mixInput: SoilMixInput = useMemo(() => {
     const withBagEstimate = (components: readonly SoilMixComponent[]): SoilMixComponent[] => components.map((component) => ({
       ...component,
@@ -384,7 +459,10 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
       bagUnit,
       bagPrice,
     }));
-    if (mix !== 'custom') return { ...SOIL_MIX_TEMPLATES[mix], components: withBagEstimate(SOIL_MIX_TEMPLATES[mix].components) };
+    if (mix !== 'custom') {
+      const template = SOIL_MIX_TEMPLATES[mix as keyof typeof SOIL_MIX_TEMPLATES];
+      return { ...template, components: withBagEstimate(template.components) };
+    }
     const components: SoilMixComponent[] = [
       { id: 'topsoil', name: 'Topsoil', ratioPercent: customTopsoil },
       { id: 'compost', name: 'Compost', ratioPercent: customCompost },
@@ -392,8 +470,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     ];
     return { templateId: 'custom', components: withBagEstimate(components) };
   }, [mix, customTopsoil, customCompost, customPotting, bagSize, bagUnit, bagPrice]);
-  const mixRows = useMemo(() => calculateSoilMix(sourceVolume.finalVolumeFt3, mixInput), [sourceVolume.finalVolumeFt3, mixInput]);
-  const mixTotalCost = mixRows.reduce((total, row) => total + (row.cost ?? 0), 0);
   const containerResult = useMemo(() => {
     if (containerMode === 'grow') return calculateGrowBagVolume({ gallons: growGallonsOne * growQtyOne + growGallonsTwo * growQtyTwo, quantity: 1 });
     if (containerMode === 'round') return calculateRoundPotVolume({ diameter: containerWidth, height: containerDepth, unit: 'in', quantity: containerQty });
@@ -405,10 +481,10 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   const spacingResult = useMemo(() => calculateSquareFootSpacing({ lengthFt: gridLength, widthFt: gridWidth, cropId: crop }), [gridLength, gridWidth, crop]);
   const depthResult = useMemo(() => checkDepthSuitability(depthUnit === 'in' ? depth : depthUnit === 'cm' ? depth / 2.54 : depthUnit === 'ft' ? depth * 12 : depth * 39.3701, crop), [depth, depthUnit, crop]);
   const shapeResult = useMemo(() => {
-    if (shapeMode === 'round') return calculateRoundRaisedBedVolume({ diameter: shapeA, depth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
-    if (shapeMode === 'lShape') return calculateLShapedRaisedBedVolume({ outerLength: shapeA, outerWidth: shapeB, cutoutLength: shapeC, cutoutWidth: shapeD, depth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
-    return calculateUShapedRaisedBedVolume({ outerLength: shapeA, outerWidth: shapeB, innerLength: shapeC, innerWidth: shapeD, depth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
-  }, [shapeMode, shapeA, shapeB, shapeC, shapeD, depth, numberOfBeds, settling]);
+    if (shapeMode === 'round') return calculateRoundRaisedBedVolume({ diameter: shapeA, depth: shapeDepth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
+    if (shapeMode === 'lShape') return calculateLShapedRaisedBedVolume({ outerLength: shapeA, outerWidth: shapeB, cutoutLength: shapeC, cutoutWidth: shapeD, depth: shapeDepth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
+    return calculateUShapedRaisedBedVolume({ outerLength: shapeA, outerWidth: shapeB, innerLength: shapeC, innerWidth: shapeD, depth: shapeDepth, unit: 'ft', depthUnit: 'in', numberOfBeds, settlingAllowancePercent: settling });
+  }, [shapeMode, shapeA, shapeB, shapeC, shapeD, shapeDepth, numberOfBeds, settling]);
   const multiResult = useMemo(() => calculateMultipleRaisedBedVolume([
     { length, width, depth, lengthUnit, widthUnit, depthUnit, numberOfBeds, freeboard, freeboardUnit: depthUnit, settlingAllowancePercent: settling },
     { length: multiLengthTwo, width: multiWidthTwo, depth: multiDepthTwo, lengthUnit: 'ft', widthUnit: 'ft', depthUnit: 'in', numberOfBeds: multiQtyTwo, freeboard: 0, freeboardUnit: 'in', settlingAllowancePercent: settling },
@@ -418,8 +494,20 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     { length: multiContainerLengthOne, width: multiContainerWidthOne, depth: multiContainerDepthOne, unit: 'in', quantity: multiContainerQtyOne },
     { length: multiContainerLengthTwo, width: multiContainerWidthTwo, depth: multiContainerDepthTwo, unit: 'in', quantity: multiContainerQtyTwo },
   ]), [multiContainerLengthOne, multiContainerWidthOne, multiContainerDepthOne, multiContainerQtyOne, multiContainerLengthTwo, multiContainerWidthTwo, multiContainerDepthTwo, multiContainerQtyTwo]);
+  const multiCombinedResult = useMemo(() => makeVolumeResult(
+    multiResult.baseVolumeFt3 + multiContainerResult.baseVolumeFt3,
+    multiResult.finalVolumeFt3 + multiContainerResult.finalVolumeFt3,
+    [...multiResult.warnings, ...multiContainerResult.warnings],
+  ), [multiResult, multiContainerResult]);
+  const symbol = currencySymbol(currency);
+  const activeVolume = tab === 'containers' ? containerResult : tab === 'topoff' ? topOffResult : tab === 'shapes' ? shapeResult : tab === 'multi' ? multiCombinedResult : (tab === 'bags' || tab === 'bulk' || tab === 'mix') ? sourceVolume : bedResult;
+  const mixBreakdownVolume = tab === 'mix' ? sourceVolume : activeVolume;
+  const mixRows: MixBreakdownResult[] = useMemo(() => calculateSoilMix(mixBreakdownVolume.finalVolumeFt3, mixInput), [mixBreakdownVolume.finalVolumeFt3, mixInput]);
+  const mixTotalCost = mixRows.reduce((total: number, row: MixBreakdownResult) => total + (row.cost ?? 0), 0);
+  const activeBagResult = useMemo(() => calculateSoilBags(activeVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [activeVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
+  const activeBulkResult = useMemo(() => compareBulkVsBags(activeVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }, { pricePerCubicYard: bulkPrice, deliveryFee, pickupTripCost, minimumOrderYards: minimumOrder, fulfillmentMode: bulkFulfillmentMode, truckAvailability, currency }), [activeVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency, bulkPrice, deliveryFee, pickupTripCost, minimumOrder, bulkFulfillmentMode, truckAvailability]);
   const costResult = useMemo(() => estimateRaisedBedProjectCost({
-    soilCost: bagResult.totalCost ?? 0,
+    soilCost: activeBagResult.totalCost ?? 0,
     lumberOrKitCost: costKit,
     compostCost: costCompost,
     mulchCost: costMulch,
@@ -428,45 +516,80 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     taxPercent,
     numberOfBeds,
     currency,
-  }), [bagResult.totalCost, costKit, costCompost, costMulch, costHardware, deliveryFee, taxPercent, numberOfBeds, currency]);
-
-  const symbol = currencySymbol(currency);
-  const activeVolume = tab === 'containers' ? containerResult : tab === 'topoff' ? topOffResult : tab === 'shapes' ? shapeResult : tab === 'multi' ? multiResult : (tab === 'bags' || tab === 'bulk' || tab === 'mix') ? sourceVolume : bedResult;
-  const activeBagResult = useMemo(() => calculateSoilBags(activeVolume.finalVolumeFt3, { bagSize, bagUnit, bagPrice, currency }), [activeVolume.finalVolumeFt3, bagSize, bagUnit, bagPrice, currency]);
+  }), [activeBagResult.totalCost, costKit, costCompost, costMulch, costHardware, deliveryFee, taxPercent, numberOfBeds, currency]);
   const activeBagLine = activeBagResult.canEstimateBags ? `${activeBagResult.bagsNeeded} × ${bagSize} ${bagUnit}` : 'Package volume required for weight-only bag labels';
   const activeBagCostLine = activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBagResult.totalCost ?? 0)}` : 'Not estimated from lb/kg labels';
-  const warnings = Array.from(new Map([...bedResult.warnings, ...activeBagResult.warnings, ...bulkResult.warnings, ...containerResult.warnings, ...mixRows.flatMap((row) => row.warnings), ...shapeResult.warnings, ...multiResult.warnings, ...multiContainerResult.warnings, ...costResult.warnings].map((warning) => [warningKey(warning), warning])).values());
+  const isVolumeTask = tab !== 'spacing' && tab !== 'depth';
+  const activeVolumeWarnings = tab === 'containers' ? containerResult.warnings
+    : tab === 'topoff' ? topOffResult.warnings
+    : tab === 'shapes' ? shapeResult.warnings
+    : tab === 'multi' ? multiCombinedResult.warnings
+    : (tab === 'bags' || tab === 'bulk' || tab === 'mix') ? sourceVolume.warnings
+    : bedResult.warnings;
+  const scopedWarnings = isVolumeTask
+    ? [...activeVolumeWarnings, ...activeBagResult.warnings, ...activeBulkResult.warnings, ...mixRows.flatMap((row) => row.warnings), ...(tab === 'cost' ? costResult.warnings : [])]
+    : [];
+  const warnings = Array.from(new Map(scopedWarnings.map((warning) => [warningKey(warning), warning])).values());
+  const needsRaisedVolumeInputs = tab === 'raised' || tab === 'cost' || tab === 'multi' || ((tab === 'bags' || tab === 'bulk' || tab === 'mix') && volumeSource === 'bed');
+  const needsManualVolumeInput = (tab === 'bags' || tab === 'bulk' || tab === 'mix') && volumeSource === 'manual';
   const validationMessages = [
-    length <= 0 || width <= 0 || depth <= 0 ? 'Enter a length, width, and depth greater than zero.' : '',
-    bagSize <= 0 ? 'Bag size must be greater than zero.' : '',
-    !activeBagResult.canEstimateBags ? 'Enter package volume from the label to estimate bags. Weight-only bag labels cannot be converted reliably.' : '',
-    bulkFulfillmentMode === 'pickup' && truckAvailability === 'notAvailable' ? 'Pickup selected without a truck or trailer. Delivery or bagged soil may be more practical.' : '',
-    mix === 'custom' && customTopsoil + customCompost + customPotting !== 100 ? 'Custom soil mix percentages must add up to 100%.' : '',
-    bulkResult.overbuyFt3 > activeVolume.finalVolumeFt3 && minimumOrder > bulkResult.requiredYd3 ? 'Your bulk minimum order is much larger than the required volume.' : '',
+    needsRaisedVolumeInputs && (length <= 0 || width <= 0 || depth <= 0) ? 'Enter raised bed length, width, and depth greater than zero for the current mode.' : '',
+    needsManualVolumeInput && manualVolume <= 0 ? 'Enter a manual soil volume greater than zero for this volume-source mode.' : '',
+    tab === 'topoff' && (length <= 0 || width <= 0 || topOffDepth <= 0) ? 'Enter top-off length, width, and top-off depth greater than zero.' : '',
+    tab === 'depth' && depth <= 0 ? 'Enter bed depth greater than zero for crop-depth suitability.' : '',
+    tab === 'shapes' && (shapeA <= 0 || shapeDepth <= 0) ? 'Enter positive shape dimensions and depth for the current shape estimate.' : '',
+    tab === 'containers' && activeVolume.finalVolumeFt3 <= 0 ? 'Enter positive container dimensions or grow-bag quantities to estimate container soil.' : '',
+    tab === 'spacing' && (gridLength <= 0 || gridWidth <= 0) ? 'Enter grid length and width above zero to estimate planting squares.' : '',
+    isVolumeTask && bagSize <= 0 ? 'Bag size must be greater than zero.' : '',
+    isVolumeTask && !activeBagResult.canEstimateBags ? 'Enter package volume from the label to estimate bags. Weight-only bag labels cannot be converted reliably.' : '',
+    isVolumeTask && bulkFulfillmentMode === 'pickup' && truckAvailability === 'notAvailable' ? 'Pickup selected without a truck or trailer. Delivery or bagged soil may be more practical.' : '',
+    tab === 'mix' && customTopsoil + customCompost + customPotting !== 100 ? 'Custom soil mix percentages must add up to 100%.' : '',
+    isVolumeTask && activeVolume.finalVolumeFt3 <= 0 ? 'Current inputs produce 0 soil volume. Check the current mode quantities and dimensions before buying materials.' : '',
+    isVolumeTask && activeBulkResult.overbuyFt3 > activeVolume.finalVolumeFt3 && minimumOrder > activeBulkResult.requiredYd3 ? 'Your bulk minimum order is much larger than the required volume.' : '',
   ].filter(Boolean);
 
-  const shoppingList = `BedSoil shopping list\nActive tool: ${tab}\nSoil volume: ${fmt(activeVolume.finalVolumeFt3)} ft³ (${fmt(activeVolume.volumeYd3)} yd³ / ${fmt(activeVolume.volumeLiters)} L)\nBags: ${activeBagLine}\nEstimated bag cost: ${activeBagCostLine}\nBulk mode: ${bulkResult.fulfillmentMode}; service cost: ${symbol}${fmt(bulkResult.serviceCost)}; truck/trailer: ${bulkResult.truckAvailability}\nBulk estimate: ${symbol}${fmt(bulkResult.bulkTotalCost)}\nProject cost estimate: ${symbol}${fmt(costResult.total)}\nMix estimate: ${mixRows.map((row) => `${row.name} ${fmt(row.volumeFt3)} ft³ / ${row.bagsNeeded ?? 'label volume required'} bags`).join('; ')}\nMix bag cost estimate: ${symbol}${fmt(mixTotalCost)}\nTop-off compost: ${fmt(topOffMaterials.compostFt3)} ft³; optional mulch: ${fmt(topOffMaterials.optionalMulchFt3)} ft³\nWarnings:\n${warningsText(warnings)}`;
+  const modeSpecificLines = [
+    isVolumeTask ? `Mix estimate for active volume: ${mixRows.map((row) => `${row.name} ${fmt(row.volumeFt3)} ft³ / ${row.bagsNeeded ?? 'label volume required'} bags`).join('; ')}` : '',
+    isVolumeTask ? `Mix bag cost estimate: ${symbol}${fmt(mixTotalCost)}` : '',
+    tab === 'topoff' ? `Top-off compost: ${fmt(topOffMaterials.compostFt3)} ft³; optional mulch: ${fmt(topOffMaterials.optionalMulchFt3)} ft³` : '',
+    tab === 'spacing' ? `Planting grid: ${spacingResult.totalSquares} squares; ${plantText(spacingResult.totalPlants)} plants for ${spacingResult.crop?.name ?? 'custom crop'}` : '',
+    tab === 'depth' ? `Depth status: ${depthResult.status}; ${depthResult.message}` : '',
+  ].filter(Boolean).join('\n');
+  const volumeShoppingList = `BedSoil shopping list\nActive tool: ${tab}\nSoil volume: ${fmt(activeVolume.finalVolumeFt3)} ft³ (${fmt(activeVolume.volumeYd3)} yd³ / ${fmt(activeVolume.volumeLiters)} L)\nBags: ${activeBagLine}\nEstimated bag cost: ${activeBagCostLine}\nBulk mode: ${activeBulkResult.fulfillmentMode}; service cost: ${symbol}${fmt(activeBulkResult.serviceCost)}; truck/trailer: ${activeBulkResult.truckAvailability}\nBulk estimate: ${symbol}${fmt(activeBulkResult.bulkTotalCost)}\nProject cost estimate: ${tab === 'cost' ? `${symbol}${fmt(costResult.total)}` : 'Open the cost tab for project-cost inputs'}\n${modeSpecificLines}\nWarnings:\n${warningsText(warnings)}`;
+  const spacingShoppingList = `BedSoil spacing plan\nActive tool: ${tab}\nGrid: ${gridLength} ft × ${gridWidth} ft = ${spacingResult.totalSquares} square-foot cells\nCrop: ${spacingResult.crop?.name ?? 'custom crop'}\nPlants per square foot: ${plantText(spacingResult.plantsPerSquareFoot)}\nEstimated plants: ${plantText(spacingResult.totalPlants)}\nBoundary: verify seed packet spacing, mature plant size, support plan, airflow, and local Extension guidance before planting.`;
+  const depthShoppingList = `BedSoil depth check\nActive tool: ${tab}\nCrop: ${spacingResult.crop?.name ?? 'custom crop'}\nBed depth: ${depth} ${depthUnit}\nStatus: ${depthResult.status}\nResult: ${depthResult.message}\nBoundary: depth suitability depends on variety, native soil or hard surface, drainage, irrigation, and local Extension guidance.`;
+  const shoppingList = tab === 'spacing' ? spacingShoppingList : tab === 'depth' ? depthShoppingList : volumeShoppingList;
 
   function createShareUrl() {
     const params = new URLSearchParams({
-      tab, vs: volumeSource, mv: String(manualVolume), vu: manualVolumeUnit, l: String(length), w: String(width), d: String(depth), lu: lengthUnit, wu: widthUnit, du: depthUnit, beds: String(numberOfBeds), free: String(freeboard), settle: String(settling), bagSize: String(bagSize), bagPrice: String(bagPrice), bu: bagUnit, bulkPrice: String(bulkPrice), delivery: String(deliveryFee), pickupCost: String(pickupTripCost), minOrder: String(minimumOrder), fulfillment: bulkFulfillmentMode, truck: truckAvailability, cur: currency, gridL: String(gridLength), gridW: String(gridWidth), topoff: String(topOffDepth), crop, shape: shapeMode, shapeA: String(shapeA), shapeB: String(shapeB), shapeC: String(shapeC), shapeD: String(shapeD), c1l: String(multiContainerLengthOne), c1w: String(multiContainerWidthOne), c1d: String(multiContainerDepthOne), c1q: String(multiContainerQtyOne), c2l: String(multiContainerLengthTwo), c2w: String(multiContainerWidthTwo), c2d: String(multiContainerDepthTwo), c2q: String(multiContainerQtyTwo),
+      tab, up: unitPreset, vs: volumeSource, mv: String(manualVolume), vu: manualVolumeUnit,
+      l: String(length), w: String(width), d: String(depth), lu: lengthUnit, wu: widthUnit, du: depthUnit, beds: String(numberOfBeds), free: String(freeboard), settle: String(settling),
+      bagSize: String(bagSize), bagPrice: String(bagPrice), bu: bagUnit,
+      bulkPrice: String(bulkPrice), delivery: String(deliveryFee), pickupCost: String(pickupTripCost), minOrder: String(minimumOrder), fulfillment: bulkFulfillmentMode, truck: truckAvailability, cur: currency,
+      mix, ctop: String(customTopsoil), ccomp: String(customCompost), cpot: String(customPotting),
+      container: containerMode, g1gal: String(growGallonsOne), g1qty: String(growQtyOne), g2gal: String(growGallonsTwo), g2qty: String(growQtyTwo), contL: String(containerLength), contW: String(containerWidth), contD: String(containerDepth), bottomD: String(bottomDiameter), contQty: String(containerQty),
+      gridL: String(gridLength), gridW: String(gridWidth), topoff: String(topOffDepth), crop,
+      shape: shapeMode, shapeA: String(shapeA), shapeB: String(shapeB), shapeC: String(shapeC), shapeD: String(shapeD), shapeDepth: String(shapeDepth),
+      costKit: String(costKit), costCompost: String(costCompost), costMulch: String(costMulch), costHardware: String(costHardware), tax: String(taxPercent),
+      m2l: String(multiLengthTwo), m2w: String(multiWidthTwo), m2d: String(multiDepthTwo), m2q: String(multiQtyTwo), m3l: String(multiLengthThree), m3w: String(multiWidthThree), m3d: String(multiDepthThree), m3q: String(multiQtyThree),
+      c1l: String(multiContainerLengthOne), c1w: String(multiContainerWidthOne), c1d: String(multiContainerDepthOne), c1q: String(multiContainerQtyOne), c2l: String(multiContainerLengthTwo), c2w: String(multiContainerWidthTwo), c2d: String(multiContainerDepthTwo), c2q: String(multiContainerQtyTwo),
     });
     return `${window.location.origin}${window.location.pathname}?${params.toString()}#calculator`;
   }
 
   async function copyShoppingList() {
-    await navigator.clipboard?.writeText(shoppingList);
-    trackCalculatorEvent('copy_shopping_list', { tab });
-    setCopied(true);
+    const ok = await writeClipboardText(shoppingList);
+    trackCalculatorEvent(ok ? 'copy_shopping_list' : 'copy_shopping_list_failed', { tab });
+    setCopied(ok);
     window.setTimeout(() => setCopied(false), 1200);
   }
 
   async function copyShareUrl() {
     const url = createShareUrl();
     window.history.replaceState(null, '', url.replace(window.location.origin, ''));
-    await navigator.clipboard?.writeText(url);
-    trackCalculatorEvent('copy_share_url', { tab });
-    setShared(true);
+    const ok = await writeClipboardText(url);
+    trackCalculatorEvent(ok ? 'copy_share_url' : 'copy_share_url_failed', { tab });
+    setShared(ok);
     window.setTimeout(() => setShared(false), 1400);
   }
 
@@ -483,7 +606,34 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
 
   function downloadCsv() {
     trackCalculatorEvent('download_csv', { tab });
-    const csv = ['item,value', `volume_ft3,${fmt(activeVolume.finalVolumeFt3)}`, `volume_yd3,${fmt(activeVolume.volumeYd3)}`, `bags,${activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'package volume required'}`, `bag_cost,${fmt(activeBagResult.totalCost ?? 0)}`, `bulk_cost,${fmt(bulkResult.bulkTotalCost)}`, `project_cost,${fmt(costResult.total)}`].join('\n');
+    const csvRows: [string, string | number][] = tab === 'spacing' ? [
+      ['item', 'value'],
+      ['mode', tab],
+      ['grid_length_ft', gridLength],
+      ['grid_width_ft', gridWidth],
+      ['total_squares', spacingResult.totalSquares],
+      ['crop', spacingResult.crop?.name ?? 'custom crop'],
+      ['plants_per_square', Array.isArray(spacingResult.plantsPerSquareFoot) ? spacingResult.plantsPerSquareFoot.join('-') : spacingResult.plantsPerSquareFoot],
+      ['total_plants', Array.isArray(spacingResult.totalPlants) ? spacingResult.totalPlants.join('-') : spacingResult.totalPlants],
+    ] : tab === 'depth' ? [
+      ['item', 'value'],
+      ['mode', tab],
+      ['crop', spacingResult.crop?.name ?? 'custom crop'],
+      ['depth_value', depth],
+      ['depth_unit', depthUnit],
+      ['status', depthResult.status],
+      ['message', depthResult.message],
+    ] : [
+      ['item', 'value'],
+      ['volume_ft3', activeVolume.finalVolumeFt3],
+      ['volume_yd3', activeVolume.volumeYd3],
+      ['volume_liters', activeVolume.volumeLiters],
+      ['bags', activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'package volume required'],
+      ['bag_cost', activeBagResult.totalCost ?? 0],
+      ['bulk_cost', activeBulkResult.bulkTotalCost],
+      ['project_cost', tab === 'cost' ? costResult.total : 'open cost tab for project-cost inputs'],
+    ];
+    const csv = csvRows.map((row) => row.map(csvValue).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -551,39 +701,64 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     URL.revokeObjectURL(url);
   }
 
+  const raisedBedSourceControls = (
+    <div className="full-width embedded-source-panel" aria-label="Raised bed dimensions used by this result">
+      <p className="muted-card">Raised bed source: these dimensions feed any mode set to use raised bed dimensions.</p>
+      <div className="input-grid nested-input-grid">
+        <NumberInput label={`Length (${lengthUnit})`} value={length} setValue={setLength} step={0.25} />
+        <SelectInput label="Length unit" value={lengthUnit} setValue={setLengthUnit} options={lengthUnitOptions} />
+        <NumberInput label={`Width (${widthUnit})`} value={width} setValue={setWidth} step={0.25} />
+        <SelectInput label="Width unit" value={widthUnit} setValue={setWidthUnit} options={lengthUnitOptions} />
+        <NumberInput label={`Depth (${depthUnit})`} value={depth} setValue={setDepth} />
+        <SelectInput label="Depth unit" value={depthUnit} setValue={setDepthUnit} options={lengthUnitOptions} />
+        <NumberInput label="Number of beds" value={numberOfBeds} setValue={setNumberOfBeds} />
+      </div>
+      <details className="advanced-panel">
+        <summary>Advanced bed assumptions: freeboard and settling</summary>
+        <div className="input-grid nested-input-grid">
+          <NumberInput label={`Freeboard (${depthUnit})`} value={freeboard} setValue={setFreeboard} step={0.5} />
+          <NumberInput label="Settling allowance (%)" value={settling} setValue={setSettling} />
+        </div>
+      </details>
+    </div>
+  );
+
+
   return (
     <section id="calculator" className="calculator-shell workspace-shell">
       <div className="workspace-header">
         <div>
-          <p className="eyebrow">Interactive planner</p>
-          <h2>Soil, bags, mix, cost, and planting workspace</h2>
-          <p className="muted-card">Results update automatically. Use the focused result panel before buying materials.</p>
+          <p className="eyebrow">Interactive raised bed calculator</p>
+          <h2>Enter bed size. Get soil volume, bags, cost, and a shopping list.</h2>
+          <p className="muted-card">Default example: one 4×8×12 in bed, 10% settling, and 2 ft³ bags. Results update automatically as inputs change.</p>
         </div>
         <span className="status-badge status-info">Planning estimate</span>
       </div>
 
       <div className="tabs primary-tabs" aria-label="Primary calculator tabs">
-        {(['raised', 'bags', 'bulk', 'mix', 'containers', 'spacing'] as const).map((item) => (
+        {(['raised', 'bags', 'bulk'] as const).map((item) => (
           <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
         ))}
       </div>
-      <div className="tabs secondary-tabs" aria-label="More planning tools">
-        <span className="tab-label">More planners</span>
-        {(['topoff', 'depth', 'cost', 'multi', 'shapes'] as const).map((item) => (
-          <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
-        ))}
-      </div>
+      <details className="more-tools" open={(['mix', 'containers', 'spacing', 'topoff', 'depth', 'cost', 'multi', 'shapes'] as readonly Tab[]).includes(tab)}>
+        <summary>More planners: mix, containers, spacing, top-off, depth, cost, multi-bed, shapes</summary>
+        <div className="tabs secondary-tabs" aria-label="More planning tools">
+          {(['mix', 'containers', 'spacing', 'topoff', 'depth', 'cost', 'multi', 'shapes'] as const).map((item) => (
+            <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
+          ))}
+        </div>
+      </details>
 
       <div className="preset-row">
         <SelectInput label="Unit preset" value={unitPreset} setValue={applyUnitPreset} options={[{ label: 'US / imperial', value: 'us' }, { label: 'Metric', value: 'metric' }]} />
         <SelectInput label="Currency" value={currency} setValue={setCurrency} options={currencyOptions} />
         {RAISED_BED_PRESETS.map((presetDepth) => (
-          <button type="button" key={presetDepth} onClick={() => { setLength(4); setWidth(8); setDepth(presetDepth); setLengthUnit('ft'); setWidthUnit('ft'); setDepthUnit('in'); setTab('raised'); }}>4×8×{presetDepth} in</button>
+          <button type="button" key={presetDepth} onClick={() => { setUnitPreset('us'); setLength(4); setWidth(8); setDepth(presetDepth); setLengthUnit('ft'); setWidthUnit('ft'); setDepthUnit('in'); setTab('raised'); }}>4×8×{presetDepth} in</button>
         ))}
       </div>
 
       <div className="calculator-grid">
-        <form className="input-grid control-panel" onSubmit={(event) => event.preventDefault()}>
+        <form className="input-grid control-panel" onSubmit={(event: FormSubmitEvent) => event.preventDefault()}>
           {tab === 'raised' && (
             <>
               <NumberInput label={`Length (${lengthUnit})`} value={length} setValue={setLength} step={0.25} />
@@ -593,11 +768,16 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               <NumberInput label={`Depth (${depthUnit})`} value={depth} setValue={setDepth} />
               <SelectInput label="Depth unit" value={depthUnit} setValue={setDepthUnit} options={lengthUnitOptions} />
               <NumberInput label="Number of beds" value={numberOfBeds} setValue={setNumberOfBeds} />
-              <NumberInput label={`Freeboard (${depthUnit})`} value={freeboard} setValue={setFreeboard} step={0.5} />
-              <NumberInput label="Settling allowance (%)" value={settling} setValue={setSettling} />
-              <div className="full-width small-buttons" aria-label="Settling allowance presets">
-                {[0, 10, 15].map((value) => <button type="button" key={value} className={settling === value ? 'active' : ''} onClick={() => setSettling(value)}>{value}% settling</button>)}
-              </div>
+              <details className="advanced-panel full-width">
+                <summary>Advanced assumptions: freeboard and settling</summary>
+                <div className="input-grid nested-input-grid">
+                  <NumberInput label={`Freeboard (${depthUnit})`} value={freeboard} setValue={setFreeboard} step={0.5} />
+                  <NumberInput label="Settling allowance (%)" value={settling} setValue={setSettling} />
+                </div>
+                <div className="small-buttons" aria-label="Settling allowance presets">
+                  {[0, 10, 15].map((value) => <button type="button" key={value} className={settling === value ? 'active' : ''} onClick={() => setSettling(value)}>{value}% settling</button>)}
+                </div>
+              </details>
             </>
           )}
 
@@ -608,7 +788,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
                 <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
                 <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
               </div>
-              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : raisedBedSourceControls}
               <NumberInput label="Bag size" value={bagSize} setValue={setBagSize} step={0.1} />
               <SelectInput label="Bag unit" value={bagUnit} setValue={setBagUnit} options={bagUnitOptions} />
               <NumberInput label={`Bag price (${symbol})`} value={bagPrice} setValue={setBagPrice} step={0.5} />
@@ -623,7 +803,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
                 <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
                 <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
               </div>
-              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : raisedBedSourceControls}
               <NumberInput label="Bag size" value={bagSize} setValue={setBagSize} step={0.1} />
               <SelectInput label="Bag unit" value={bagUnit} setValue={setBagUnit} options={bagUnitOptions} />
               <NumberInput label={`Bag price (${symbol})`} value={bagPrice} setValue={setBagPrice} step={0.5} />
@@ -642,8 +822,8 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
                 <button type="button" className={volumeSource === 'bed' ? 'active' : ''} onClick={() => setVolumeSource('bed')}>Use raised bed dimensions</button>
                 <button type="button" className={volumeSource === 'manual' ? 'active' : ''} onClick={() => setVolumeSource('manual')}>Enter total volume</button>
               </div>
-              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : <p className="full-width muted-card">Using the raised-bed dimensions from the main calculator: {fmt(bedResult.finalVolumeFt3)} ft³.</p>}
-              <label className="full-width"><span>Mix template</span><select value={mix} onChange={(event) => setMix(event.target.value as keyof typeof SOIL_MIX_TEMPLATES | 'custom')}><option value="basic">Basic raised bed mix 60/30/10</option><option value="soilless">Compost + soilless mix 50/50</option><option value="melsMix">Mel&apos;s Mix style</option><option value="budgetFill">Budget fill</option><option value="custom">Custom ratio</option></select></label>
+              {volumeSource === 'manual' ? <><NumberInput label="Required volume" value={manualVolume} setValue={setManualVolume} step={0.1} /><SelectInput label="Volume unit" value={manualVolumeUnit} setValue={setManualVolumeUnit} options={volumeUnitOptions} /></> : raisedBedSourceControls}
+              <label className="full-width"><span>Mix template</span><select value={mix} onChange={(event: FieldChangeEvent) => setMix(event.target.value as keyof typeof SOIL_MIX_TEMPLATES | 'custom')}><option value="basic">Basic raised bed mix 60/30/10</option><option value="soilless">Compost + soilless mix 50/50</option><option value="melsMix">Mel&apos;s Mix style</option><option value="budgetFill">Budget fill</option><option value="custom">Custom ratio</option></select></label>
               {mix === 'custom' ? <><NumberInput label="Topsoil %" value={customTopsoil} setValue={setCustomTopsoil} /><NumberInput label="Compost %" value={customCompost} setValue={setCustomCompost} /><NumberInput label="Potting / aeration %" value={customPotting} setValue={setCustomPotting} /><p className="full-width muted-card">Custom total: {customTopsoil + customCompost + customPotting}%. It must equal 100%.</p></> : null}
             </>
           )}
@@ -674,7 +854,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             <>
               <NumberInput label="Grid length (ft)" value={gridLength} setValue={setGridLength} />
               <NumberInput label="Grid width (ft)" value={gridWidth} setValue={setGridWidth} />
-              <label><span>Crop</span><select value={crop} onChange={(event) => setCrop(event.target.value)}>{CROPS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              <label><span>Crop</span><select value={crop} onChange={(event: FieldChangeEvent) => setCrop(event.target.value)}>{CROPS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             </>
           )}
 
@@ -683,7 +863,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               <NumberInput label={`Length (${lengthUnit})`} value={length} setValue={setLength} />
               <NumberInput label={`Width (${widthUnit})`} value={width} setValue={setWidth} />
               <NumberInput label={`Top-off depth (${depthUnit})`} value={topOffDepth} setValue={setTopOffDepth} step={0.5} />
-              <div className="full-width small-buttons" aria-label="Top-off depth presets">{[1, 2, 3].map((value) => <button type="button" key={value} className={topOffDepth === value ? 'active' : ''} onClick={() => setTopOffDepth(value)}>{value} {depthUnit}</button>)}</div>
+              <div className="full-width small-buttons" aria-label="Top-off depth presets">{(depthUnit === 'ft' ? [1 / 12, 2 / 12, 3 / 12] : depthUnit === 'cm' ? [2.5, 5, 7.5] : depthUnit === 'm' ? [0.025, 0.05, 0.075] : [1, 2, 3]).map((value) => <button type="button" key={value} className={topOffDepth === value ? 'active' : ''} onClick={() => setTopOffDepth(value)}>{value} {depthUnit}</button>)}</div>
               <NumberInput label="Number of beds" value={numberOfBeds} setValue={setNumberOfBeds} />
             </>
           )}
@@ -692,12 +872,13 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             <>
               <NumberInput label={`Bed depth (${depthUnit})`} value={depth} setValue={setDepth} />
               <SelectInput label="Depth unit" value={depthUnit} setValue={setDepthUnit} options={lengthUnitOptions} />
-              <label><span>Crop</span><select value={crop} onChange={(event) => setCrop(event.target.value)}>{CROPS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              <label><span>Crop</span><select value={crop} onChange={(event: FieldChangeEvent) => setCrop(event.target.value)}>{CROPS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             </>
           )}
 
           {tab === 'cost' && (
             <>
+              {raisedBedSourceControls}
               <NumberInput label={`Bed kit / lumber (${symbol})`} value={costKit} setValue={setCostKit} />
               <NumberInput label={`Compost add-on (${symbol})`} value={costCompost} setValue={setCostCompost} />
               <NumberInput label={`Mulch (${symbol})`} value={costMulch} setValue={setCostMulch} />
@@ -709,7 +890,8 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
 
           {tab === 'multi' && (
             <>
-              <p className="full-width muted-card">Row 1 uses the main raised bed dimensions above. Add two optional rows below for multiple areas.</p>
+              {raisedBedSourceControls}
+              <p className="full-width muted-card">Row 1 uses the raised bed dimensions shown here. Add two optional raised-bed rows and optional container rows below.</p>
               <NumberInput label="Row 2 length ft" value={multiLengthTwo} setValue={setMultiLengthTwo} />
               <NumberInput label="Row 2 width ft" value={multiWidthTwo} setValue={setMultiWidthTwo} />
               <NumberInput label="Row 2 depth in" value={multiDepthTwo} setValue={setMultiDepthTwo} />
@@ -737,7 +919,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               {shapeMode !== 'round' ? <NumberInput label="Outer width (ft)" value={shapeB} setValue={setShapeB} /> : null}
               {shapeMode !== 'round' ? <NumberInput label={shapeMode === 'lShape' ? 'Cutout length (ft)' : 'Inner opening length (ft)'} value={shapeC} setValue={setShapeC} /> : null}
               {shapeMode !== 'round' ? <NumberInput label={shapeMode === 'lShape' ? 'Cutout width (ft)' : 'Inner opening width (ft)'} value={shapeD} setValue={setShapeD} /> : null}
-              <NumberInput label="Depth (in)" value={depth} setValue={setDepth} />
+              <NumberInput label="Depth (in)" value={shapeDepth} setValue={setShapeDepth} />
               <NumberInput label="Quantity" value={numberOfBeds} setValue={setNumberOfBeds} />
               <div className="full-width small-buttons" aria-label="Settling allowance presets">{[0, 10, 15].map((value) => <button type="button" key={value} className={settling === value ? 'active' : ''} onClick={() => setSettling(value)}>{value}% settling</button>)}</div>
             </>
@@ -761,38 +943,74 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             <p>{tab === 'bags' || tab === 'bulk' || tab === 'mix' ? `Volume source: ${volumeSource === 'manual' ? `${manualVolume} ${manualVolumeUnit}` : 'raised bed dimensions'}.` : 'Results are planning estimates and should be checked against product labels and local conditions.'}</p>
           </div>
 
-          <div className="result-card-grid">
-            <div className="result-card"><span>Bags needed</span><strong>{activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'Volume needed'}</strong><small>{activeBagResult.canEstimateBags ? `${bagSize} ${bagUnit} · leftover ${fmt(activeBagResult.leftoverFt3)} ft³` : 'Use package ft³, dry qt, L, or gal instead of lb/kg.'}</small></div>
-            <div className="result-card"><span>Bag cost</span><strong>{activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBagResult.totalCost ?? 0)}` : 'Not estimated'}</strong><small>{activeBagResult.canEstimateBags ? `${symbol}${fmt(bulkResult.bagCostPerFt3)} per ft³` : 'Weight-only bags need a volume label.'}</small></div>
-            <div className="result-card"><span>Bulk order</span><strong>{fmt(bulkResult.bulkOrderYd3)} yd³</strong><small>{symbol}{fmt(bulkResult.bulkTotalCost)} · {bulkResult.fulfillmentMode} · {fmt(bulkResult.overbuyFt3)} ft³ extra</small></div>
-            <div className="result-card"><span>Cost signal</span><strong>{bulkResult.recommendation}</strong><small>Savings vs bags: {symbol}{fmt(bulkResult.savings)}</small></div>
+          <div className="button-row action-row quick-action-row" aria-label="Primary result actions">
+            <button type="button" className="primary" onClick={copyShoppingList}>{copied ? 'Copied' : 'Copy shopping list'}</button>
+            <button type="button" onClick={printResult}>Print / save as PDF</button>
+            <button type="button" onClick={copyShareUrl}>{shared ? 'URL copied' : 'Copy share URL'}</button>
           </div>
 
-          <div className="metric-group" aria-label="Volume conversions">
-            <h3>Volume conversions</h3>
-            <div className="metric"><span>Base cubic feet</span><strong>{fmt(activeVolume.baseVolumeFt3)}</strong></div>
-            <div className="metric"><span>Final cubic feet</span><strong>{fmt(activeVolume.finalVolumeFt3)}</strong></div>
-            <div className="metric"><span>Cubic yards</span><strong>{fmt(activeVolume.volumeYd3)}</strong></div>
-            <div className="metric"><span>Dry quarts</span><strong>{fmt(activeVolume.volumeDryQuarts)}</strong></div>
-            <div className="metric"><span>Gallons</span><strong>{fmt(activeVolume.volumeGallons)}</strong></div>
-          </div>
+          {isVolumeTask ? (
+            <div className="result-card-grid volume-result-cards">
+              <div className="result-card"><span>Bags needed</span><strong>{activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'Volume needed'}</strong><small>{activeBagResult.canEstimateBags ? `${bagSize} ${bagUnit} · leftover ${fmt(activeBagResult.leftoverFt3)} ft³` : 'Use package ft³, dry qt, L, or gal instead of lb/kg.'}</small></div>
+              <div className="result-card"><span>Bag cost</span><strong>{activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBagResult.totalCost ?? 0)}` : 'Not estimated'}</strong><small>{activeBagResult.canEstimateBags ? `${symbol}${fmt(activeBulkResult.bagCostPerFt3)} per ft³` : 'Weight-only bags need a volume label.'}</small></div>
+              <div className="result-card"><span>Bulk order</span><strong>{fmt(activeBulkResult.bulkOrderYd3)} yd³</strong><small>{symbol}{fmt(activeBulkResult.bulkTotalCost)} · {activeBulkResult.fulfillmentMode} · {fmt(activeBulkResult.overbuyFt3)} ft³ extra</small></div>
+              <div className="result-card"><span>Cost signal</span><strong>{recommendationLabel(activeBulkResult.recommendation)}</strong><small>{activeBulkResult.recommendation === 'notComparable' ? 'Enter positive volume and a package volume label.' : `Savings vs bags: ${symbol}${fmt(activeBulkResult.savings)}`}</small></div>
+            </div>
+          ) : tab === 'spacing' ? (
+            <div className="result-card-grid task-result-cards" aria-label="Spacing result details">
+              <div className="result-card"><span>Grid size</span><strong>{spacingResult.totalSquares} sq ft</strong><small>{gridLength} ft × {gridWidth} ft input</small></div>
+              <div className="result-card"><span>Crop</span><strong>{spacingResult.crop?.name ?? 'Custom crop'}</strong><small>{spacingResult.crop?.notes ?? 'Check seed packet spacing.'}</small></div>
+              <div className="result-card"><span>Plants per square</span><strong>{plantText(spacingResult.plantsPerSquareFoot)}</strong><small>Planning assumption, not a yield guarantee.</small></div>
+              <div className="result-card"><span>Total plants</span><strong>{plantText(spacingResult.totalPlants)}</strong><small>Verify mature size, support, and airflow.</small></div>
+            </div>
+          ) : (
+            <div className="result-card-grid task-result-cards" aria-label="Depth result details">
+              <div className="result-card"><span>Crop</span><strong>{spacingResult.crop?.name ?? 'Custom crop'}</strong><small>Depth guidance is crop-specific.</small></div>
+              <div className="result-card"><span>Bed depth</span><strong>{depth} {depthUnit}</strong><small>Converted internally to inches for the check.</small></div>
+              <div className="result-card"><span>Status</span><strong>{depthResult.status}</strong><small>Planning estimate only.</small></div>
+              <div className="result-card"><span>Boundary</span><strong>Verify locally</strong><small>Variety, surface, drainage, and irrigation matter.</small></div>
+            </div>
+          )}
 
-          <div className="mini-table result-section"><h3>Mix breakdown</h3>{mixRows.map((row) => <div key={row.componentId}><span>{row.name}</span><strong>{fmt(row.volumeFt3)} ft³ · {row.bagsNeeded ?? 'label volume required'} bags · {symbol}{fmt(row.cost ?? 0)}</strong></div>)}<div><span>Estimated mix bag cost</span><strong>{symbol}{fmt(mixTotalCost)}</strong></div></div>
+          <AdSlot placement="result" />
+
+          {isVolumeTask ? (
+            <div className="metric-group" aria-label="Volume conversions">
+              <h3>Volume conversions</h3>
+              <div className="metric"><span>Base cubic feet</span><strong>{fmt(activeVolume.baseVolumeFt3)}</strong></div>
+              <div className="metric"><span>Final cubic feet</span><strong>{fmt(activeVolume.finalVolumeFt3)}</strong></div>
+              <div className="metric"><span>Cubic yards</span><strong>{fmt(activeVolume.volumeYd3)}</strong></div>
+              <div className="metric"><span>Dry quarts</span><strong>{fmt(activeVolume.volumeDryQuarts)}</strong></div>
+              <div className="metric"><span>Gallons</span><strong>{fmt(activeVolume.volumeGallons)}</strong></div>
+            </div>
+          ) : null}
+
+          {isVolumeTask ? <div className="mini-table result-section"><h3>Mix breakdown for active volume</h3><p className="muted-card">This uses the soil volume shown in the focused result above, so container, top-off, shape, and multi-project estimates stay aligned with the current mode.</p>{mixRows.map((row) => <div key={row.componentId}><span>{row.name}</span><strong>{fmt(row.volumeFt3)} ft³ · {row.bagsNeeded ?? 'label volume required'} bags · {symbol}{fmt(row.cost ?? 0)}</strong></div>)}<div><span>Estimated mix bag cost</span><strong>{symbol}{fmt(mixTotalCost)}</strong></div></div> : null}
           {tab === 'containers' ? <p className="callout">Container volume: <b>{fmt(containerResult.finalVolumeFt3)} ft³</b> / {fmt(containerResult.volumeLiters)} L</p> : null}
-          {tab === 'multi' ? <p className="callout">Multiple beds: <b>{fmt(multiResult.finalVolumeFt3)} ft³</b>. Multiple containers: <b>{fmt(multiContainerResult.finalVolumeFt3)} ft³</b>.</p> : null}
+          {tab === 'multi' ? <p className="callout">Combined multi-project volume: <b>{fmt(multiCombinedResult.finalVolumeFt3)} ft³</b>. Beds: <b>{fmt(multiResult.finalVolumeFt3)} ft³</b>. Containers: <b>{fmt(multiContainerResult.finalVolumeFt3)} ft³</b>.</p> : null}
           {tab === 'topoff' ? <p className="callout">Annual top-off need: <b>{fmt(topOffResult.finalVolumeFt3)} ft³</b>. Compost planning amount: <b>{fmt(topOffMaterials.compostFt3)} ft³</b>. Optional mulch estimate: <b>{fmt(topOffMaterials.optionalMulchFt3)} ft³</b>.</p> : null}
           {tab === 'spacing' ? <><p className="callout">{spacingResult.totalSquares} squares × {plantText(spacingResult.plantsPerSquareFoot)} plants per square = <b>{plantText(spacingResult.totalPlants)} plants</b></p><SquareFootGridPreview lengthFt={gridLength} widthFt={gridWidth} cropLabel={spacingResult.crop?.name ?? 'custom crop'} /></> : null}
           {tab === 'depth' ? <p className={`callout status-callout status-${depthResult.status === 'good' ? 'success' : depthResult.status === 'borderline' ? 'warning' : 'danger'}`}><b>Status: {depthResult.status}</b>. {depthResult.message}</p> : null}
+          {tab === 'spacing' || tab === 'depth' ? <div className="result-section assumption-note"><h3>Crop assumption and source boundary</h3><p>Spacing and depth are conservative planning estimates. Check your seed packet, plant tag, local Extension guidance, variety habit, trellis plan, surface type, drainage, and season before planting.</p>{spacingResult.crop ? <><p>{spacingResult.crop.name}: {spacingResult.crop.notes}</p><p>{spacingResult.crop.basis}</p>{spacingResult.crop.sourceNote ? <p><b>Source boundary:</b> {spacingResult.crop.sourceNote}</p> : null}</> : null}</div> : null}
           {tab === 'shapes' ? <p className="callout">Shape estimate: <b>{fmt(shapeResult.finalVolumeFt3)} ft³</b>. Use as an approximation for non-rectangular beds.</p> : null}
           {tab === 'cost' ? <p className="callout">Estimated project cost: <b>{symbol}{fmt(costResult.total)}</b>, or {symbol}{fmt(costResult.costPerBed)} per bed.</p> : null}
 
-          <div className="assumption-strip">
-            <span>Settling: {settling}%</span>
-            <span>Freeboard: {freeboard} {depthUnit}</span>
-            <span>Bag: {bagSize} {bagUnit}</span>
-            <span>Bulk minimum: {minimumOrder} yd³</span>
-            <span>Bulk mode: {bulkResult.fulfillmentMode}</span>
-          </div>
+          {isVolumeTask ? (
+            <div className="assumption-strip">
+              <span>Settling: {settling}%</span>
+              <span>Freeboard: {freeboard} {depthUnit}</span>
+              <span>Bag: {bagSize} {bagUnit}</span>
+              <span>Bulk minimum: {minimumOrder} yd³</span>
+              <span>Bulk mode: {activeBulkResult.fulfillmentMode}</span>
+            </div>
+          ) : (
+            <div className="assumption-strip task-assumption-strip">
+              <span>Mode: {tab}</span>
+              <span>Crop: {spacingResult.crop?.name ?? 'custom crop'}</span>
+              <span>{tab === 'spacing' ? `Grid: ${gridLength}×${gridWidth} ft` : `Depth: ${depth} ${depthUnit}`}</span>
+              <span>Boundary: check seed packet and local Extension guidance</span>
+            </div>
+          )}
 
           <h3>Shopping list</h3>
           <pre>{shoppingList}</pre>

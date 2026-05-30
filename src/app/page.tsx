@@ -1,9 +1,20 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Calculator } from '@/components/Calculator';
 import { Disclaimer } from '@/components/Disclaimer';
 import { FAQ } from '@/components/FAQ';
 import { RelatedLinks } from '@/components/RelatedLinks';
 import { AffiliateSlot } from '@/components/AffiliateSlot';
+import { PlanningSources } from '@/components/PlanningSources';
+import { SITE_URL } from '@/lib/site';
+
+export const metadata: Metadata = {
+  title: 'Raised Bed Soil Calculator - Soil Volume, Bags & Shopping List',
+  description: 'Enter raised bed length, width, depth, and bag size to estimate cubic feet, cubic yards, liters, bags, bulk cost, and a copyable shopping list.',
+  alternates: {
+    canonical: '/',
+  },
+};
 
 const homeStructuredData = {
   '@context': 'https://schema.org',
@@ -12,7 +23,12 @@ const homeStructuredData = {
   description: 'Free raised bed soil, bag, bulk, mix, container, top-off, depth, and square-foot planting calculators.',
   applicationCategory: 'UtilitiesApplication',
   operatingSystem: 'Any',
+  url: SITE_URL,
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  potentialAction: {
+    '@type': 'UseAction',
+    target: `${SITE_URL}/#calculator`,
+  },
 };
 
 const related = [
@@ -38,13 +54,14 @@ export default function Home() {
     <main className="page">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeStructuredData) }} />
 
-      <section className="hero">
+      <section className="hero compact-hero">
         <p className="eyebrow">Raised Bed Soil & Planting Planner</p>
         <h1>Raised Bed Soil Calculator</h1>
-        <p>Calculate soil volume, bags, bulk cost, compost mix, annual top-off, container volume, depth fit, and square foot planting space before buying materials.</p>
+        <p>Enter bed size and bag size to estimate soil volume, bags, bulk order size, cost, and a copyable shopping list before buying materials.</p>
         <div className="button-row">
-          <a className="pill primary" href="#calculator">Start calculating</a>
-          <Link className="pill" href="/4x8-raised-bed-soil-calculator">4×8 calculator</Link>
+          <a className="pill primary" href="#calculator">Use the calculator</a>
+          <Link className="pill" href="/4x8-raised-bed-soil-calculator">Load 4×8 presets</Link>
+          <Link className="pill" href="/soil-bags-calculator">Convert volume to bags</Link>
         </div>
       </section>
 
@@ -55,6 +72,8 @@ export default function Home() {
         <p>Raised bed volume = length × width × effective depth × number of beds × settling allowance. Soil bag count = ceil(required cubic feet ÷ bag cubic feet).</p>
         <h2>Example calculation</h2>
         <p>A 4 ft × 8 ft × 12 in raised bed equals 32 ft³, or 1.19 yd³. Two beds with 10% settling need 70.4 ft³, or 2.61 yd³.</p>
+        <h2>Default example</h2>
+        <p>The calculator opens with a 4×8×12 in single-bed example, 10% settling, and a 2 ft³ bag size so users can understand the result immediately.</p>
       </section>
 
 
@@ -74,6 +93,7 @@ export default function Home() {
       </section>
 
       <RelatedLinks slugs={related} />
+      <PlanningSources />
       <AffiliateSlot />
       <FAQ />
       <Disclaimer />

@@ -21,8 +21,13 @@ export interface BagResult {
   warnings: CalculatorWarning[];
 }
 
+function safeNonNegative(value: number | undefined): number {
+  return Number.isFinite(value) ? Math.max(0, value as number) : 0;
+}
+
 export function calculateSoilBags(requiredVolumeFt3: number, input: SoilBagInput): BagResult {
   const warnings: CalculatorWarning[] = [];
+  const safeRequiredVolumeFt3 = safeNonNegative(requiredVolumeFt3);
 
   const isWeightBased = input.bagUnit === 'lb' || input.bagUnit === 'kg';
 
@@ -32,9 +37,10 @@ export function calculateSoilBags(requiredVolumeFt3: number, input: SoilBagInput
 
   const bagVolumeFt3 = volumeToFt3(input.bagSize, input.bagUnit);
   const canEstimateBags = !isWeightBased && bagVolumeFt3 > 0;
-  if (input.bagSize <= 0) warnings.push(warn('bag-size-zero', 'Bag size must be greater than zero.', 'critical'));
+  if (!Number.isFinite(input.bagSize) || input.bagSize <= 0) warnings.push(warn('bag-size-zero', 'Bag size must be greater than zero.', 'critical'));
+  const safeBagPrice = safeNonNegative(input.bagPrice);
 
-  if (requiredVolumeFt3 <= 0 || bagVolumeFt3 <= 0) {
+  if (safeRequiredVolumeFt3 <= 0 || bagVolumeFt3 <= 0) {
     return {
       bagVolumeFt3,
       rawBags: 0,
@@ -48,16 +54,16 @@ export function calculateSoilBags(requiredVolumeFt3: number, input: SoilBagInput
     };
   }
 
-  const rawBags = requiredVolumeFt3 / bagVolumeFt3;
+  const rawBags = safeRequiredVolumeFt3 / bagVolumeFt3;
   const bagsNeeded = Math.ceil(rawBags);
-  const leftoverFt3 = bagsNeeded * bagVolumeFt3 - requiredVolumeFt3;
+  const leftoverFt3 = bagsNeeded * bagVolumeFt3 - safeRequiredVolumeFt3;
 
   return {
     bagVolumeFt3,
     rawBags,
     bagsNeeded,
     leftoverFt3,
-    totalCost: input.bagPrice === undefined ? undefined : bagsNeeded * input.bagPrice,
+    totalCost: input.bagPrice === undefined ? undefined : bagsNeeded * safeBagPrice,
     currency: input.currency,
     canEstimateBags,
     isWeightBased,

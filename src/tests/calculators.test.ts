@@ -145,6 +145,20 @@ describe('BedSoil completed P1 planning functions', () => {
     expect(result.optionalMulchFt3).toBeCloseTo(2, 4);
   });
 
+
+
+  it('treats zero optional quantities as zero volume, not one hidden row', () => {
+    const zeroBed = calculateRaisedBedVolume({ ...baseBed, numberOfBeds: 0 });
+    expect(zeroBed.finalVolumeFt3).toBe(0);
+    expect(zeroBed.warnings.some((warning) => warning.code === 'bed-count-zero')).toBe(true);
+    const zeroContainer = calculateMultipleRectangularContainerVolume([
+      { length: 24, width: 12, depth: 12, unit: 'in', quantity: 0 },
+    ]);
+    expect(zeroContainer.finalVolumeFt3).toBe(0);
+    const zeroGrowBag = calculateGrowBagVolume({ gallons: 15, quantity: 0 });
+    expect(zeroGrowBag.finalVolumeFt3).toBe(0);
+  });
+
   it('returns bulk comparison cost-per-volume and overbuy fields', () => {
     const result = compareBulkVsBags(32, { bagSize: 2, bagUnit: 'ft3', bagPrice: 8 }, { pricePerCubicYard: 60, deliveryFee: 40, minimumOrderYards: 2 });
     expect(result.requiredYd3).toBeCloseTo(32 / 27, 4);

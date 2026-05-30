@@ -6,10 +6,16 @@ export interface RoundPotInput { diameter: number; height: number; unit: LengthU
 export interface TaperedPotInput { topDiameter: number; bottomDiameter: number; height: number; unit: LengthUnit; quantity: number; }
 export interface RectangularPlanterInput { length: number; width: number; depth: number; unit: LengthUnit; quantity: number; }
 
-function qty(value: number): number { return Math.max(1, Math.floor(value || 1)); }
+function qty(value: number): number {
+  return Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
+}
+
+function safeNonNegative(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
 
 export function calculateGrowBagVolume(input: GrowBagInput) {
-  const volumeFt3 = Math.max(0, input.gallons) * FT3_PER_GALLON * qty(input.quantity);
+  const volumeFt3 = safeNonNegative(input.gallons) * FT3_PER_GALLON * qty(input.quantity);
   return makeVolumeResult(volumeFt3, volumeFt3, [warn('grow-bag-nominal', 'Grow bag listed capacity and real filled volume can vary by brand, fabric shape, compaction, and fill level.', 'info')]);
 }
 

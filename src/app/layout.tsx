@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 import { ADSENSE_CLIENT, SITE_URL } from '@/lib/site';
@@ -7,10 +8,13 @@ import './globals.css';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Raised Bed Soil Calculator - BedSoil',
+    default: 'Raised Bed Soil Calculator - Soil Volume, Bags & Shopping List',
     template: '%s | BedSoil',
   },
-  description: 'Calculate how much soil you need for raised garden beds by length, width, depth, bag size, and unit. Estimate cubic feet, cubic yards, liters, and bag count.',
+  description: 'Enter raised bed length, width, depth, and bag size to estimate cubic feet, cubic yards, liters, bags, bulk cost, and a copyable shopping list.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     siteName: 'BedSoil',
     type: 'website',
@@ -30,7 +34,7 @@ const nav = [
   ['Spacing', '/square-foot-garden-spacing-calculator'],
 ];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
