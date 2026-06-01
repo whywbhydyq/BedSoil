@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import Script from 'next/script';
+import { AdSenseAutoAds } from '@/components/AdSenseAutoAds';
 import { ADSENSE_CLIENT, SITE_URL } from '@/lib/site';
 import './globals.css';
 
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Script async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`} crossOrigin="anonymous" strategy="afterInteractive" />
+        <AdSenseAutoAds />
         <header className="header">
           <div className="bar">
             <Link className="brand" href="/">BedSoil</Link>
