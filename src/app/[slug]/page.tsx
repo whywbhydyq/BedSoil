@@ -2,27 +2,30 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdSlot } from '@/components/AdSlot';
 import { Calculator } from '@/components/Calculator';
+import { JsonLd } from '@/components/JsonLd';
+import { Methodology } from '@/components/Methodology';
+import { ContentQualityPanel } from '@/components/ContentQualityPanel';
+import { PageInsights } from '@/components/PageInsights';
+import { SoilPlanningDiagram } from '@/components/SoilPlanningDiagram';
 import { Disclaimer } from '@/components/Disclaimer';
 import { FAQ } from '@/components/FAQ';
 import { RelatedLinks } from '@/components/RelatedLinks';
 import { AffiliateSlot } from '@/components/AffiliateSlot';
 import { PlanningSources } from '@/components/PlanningSources';
+import { ProgrammaticPlanningPanel } from '@/components/ProgrammaticPlanningPanel';
+import { TopicClusterPanel } from '@/components/TopicClusterPanel';
+import { FlowPathPanel } from '@/components/FlowPathPanel';
+import { SxoIntentPanel } from '@/components/SxoIntentPanel';
+import { ImageSeoPanel } from '@/components/ImageSeoPanel';
+import { VisualTaskPanel } from '@/components/VisualTaskPanel';
+import { CompetitorComparisonPage } from '@/components/CompetitorComparisonPage';
+import { GeoCitationPanel } from '@/components/GeoCitationPanel';
 import { allPages, pageMetadata } from '@/lib/data/pages';
+import { contentQualityForPage } from '@/lib/data/contentQuality';
 import { fourByEightDepthCopy, fourByEightDepthOutputsForSlug } from '@/lib/data/pageContent';
-import { SITE_URL } from '@/lib/site';
+import { pageStructuredData } from '@/lib/seo/jsonLd';
+import { comparisonPageForSlug } from '@/lib/data/competitorPages';
 
-function calculatorStructuredData(page: { title: string; description: string; slug: string }) {
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'WebApplication',
-    name: page.title,
-    description: page.description,
-    applicationCategory: 'UtilitiesApplication',
-    operatingSystem: 'Any',
-    url: `${SITE_URL}/${page.slug}`,
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-  };
-}
 
 
 function presetIntro(page: { title: string; initial?: string; formula?: string; example?: string }) {
@@ -91,16 +94,47 @@ export default async function SlugPage({ params }: { params: Promise<{ slug: str
     throw new Error(`Unknown BedSoil page: ${slug}`);
   }
   const intro = presetIntro(page);
+  const contentBrief = contentQualityForPage(page);
   const fourByEightOutputs = fourByEightDepthOutputsForSlug(page.slug);
+  const comparisonPage = page.comparison ? comparisonPageForSlug(page.comparison) : undefined;
+
+  if (comparisonPage) {
+    return (
+      <main id="main-content" className="page two-column">
+        <div>
+          <section className="hero">
+            <p className="eyebrow">Fair calculator comparison</p>
+            <h1>{comparisonPage.h1}</h1>
+            <p>{comparisonPage.description}</p>
+            <div className="button-row">
+              <a className="pill primary" href={comparisonPage.primaryCtaHref}>{comparisonPage.primaryCta}</a>
+              {comparisonPage.secondaryCta && comparisonPage.secondaryCtaHref ? <a className="pill" href={comparisonPage.secondaryCtaHref}>{comparisonPage.secondaryCta}</a> : null}
+            </div>
+          </section>
+          <JsonLd data={pageStructuredData(page)} />
+          <CompetitorComparisonPage page={comparisonPage} />
+          <GeoCitationPanel page={page} title="AI citation guide for this comparison" />
+          <ProgrammaticPlanningPanel page={page} />
+          <FlowPathPanel page={page} title="Comparison-to-calculator flow" />
+          <Disclaimer />
+          <RelatedLinks slugs={page.related ?? ['raised-bed-soil-calculator', 'soil-bags-calculator']} />
+        </div>
+        <aside>
+          <AdSlot placement="sidebar" />
+        </aside>
+      </main>
+    );
+  }
 
   if (page.legal) {
     return (
-      <main className="page">
+      <main id="main-content" className="page">
         <section className="hero">
           <p className="eyebrow">BedSoil</p>
           <h1>{page.title}</h1>
           <p>{page.description}</p>
         </section>
+        <JsonLd data={pageStructuredData(page)} />
         <section className="content-card">
           {page.legal.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </section>
@@ -110,14 +144,14 @@ export default async function SlugPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <main className="page two-column">
+    <main id="main-content" className="page two-column">
       <div>
         <section className="hero">
           <p className="eyebrow">Raised Bed Soil & Planting Calculator</p>
           <h1>{page.title}</h1>
           <p>{page.description}</p>
         </section>
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(calculatorStructuredData(page)) }} />
+        <JsonLd data={pageStructuredData(page)} />
 
         <section className="content-card preset-summary">
           <h2>Preset loaded: {intro.modeLabel}</h2>
@@ -129,9 +163,20 @@ export default async function SlugPage({ params }: { params: Promise<{ slug: str
           </ul>
         </section>
 
-
+        <VisualTaskPanel page={page} title="Above-the-fold task path for this calculator" />
 
         <Calculator initial={page.initial} presetSlug={page.slug} />
+
+        <div className="below-fold-stack">
+          <ContentQualityPanel brief={contentBrief} />
+          <GeoCitationPanel page={page} title="AI citation guide for this calculator" />
+          <SxoIntentPanel page={page} title="Search experience fit for this calculator" />
+          <SoilPlanningDiagram title={page.title} />
+          <ImageSeoPanel title={page.title} />
+          <PageInsights page={page} />
+          <ProgrammaticPlanningPanel page={page} />
+          <TopicClusterPanel page={page} />
+          <FlowPathPanel page={page} title="Search-to-result flow for this page" />
 
         {fourByEightOutputs.length > 0 ? (
           <section className="content-card depth-output-summary">
@@ -177,12 +222,14 @@ export default async function SlugPage({ params }: { params: Promise<{ slug: str
           <ul>{page.notes?.map((note) => <li key={note}>{note}</li>)}</ul>
         </section>
 
+        <Methodology />
         <PlanningSources slug={page.slug} initial={page.initial} />
         <AffiliateSlot />
         {page.slug.includes('checklist') ? <section className="content-card"><h2>Seasonal checklist</h2><ul><li>Measure current soil surface below the bed rim.</li><li>Estimate 1, 2, or 3 inches of top-off material before buying bags.</li><li>Check whether crops need deeper soil before planting.</li><li>Use compost and mulch as planning estimates, not a region-specific calendar.</li><li>Print or copy the shopping list before visiting a garden center.</li></ul></section> : null}
         <FAQ />
         <Disclaimer />
-        <RelatedLinks slugs={page.related ?? ['raised-bed-soil-calculator', 'soil-bags-calculator']} />
+          <RelatedLinks slugs={page.related ?? ['raised-bed-soil-calculator', 'soil-bags-calculator']} />
+        </div>
       </div>
       <aside>
         <AdSlot placement="sidebar" />

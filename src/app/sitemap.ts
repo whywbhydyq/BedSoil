@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { allPages } from '@/lib/data/pages';
+import { lastModifiedForSlug } from '@/lib/seo/pageDates';
 import { SITE_URL } from '@/lib/site';
 
 const baseUrl = SITE_URL;
@@ -18,12 +19,11 @@ function changeFrequencyFor(slug: string): MetadataRoute.Sitemap[number]['change
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
   return [
-    { url: baseUrl, lastModified: now, changeFrequency: 'weekly', priority: 1 },
+    { url: baseUrl, lastModified: lastModifiedForSlug(), changeFrequency: 'weekly', priority: 1 },
     ...allPages.map((page) => ({
       url: `${baseUrl}/${page.slug}`,
-      lastModified: now,
+      lastModified: lastModifiedForSlug(page.slug),
       changeFrequency: changeFrequencyFor(page.slug),
       priority: priorityFor(page.slug),
     })),

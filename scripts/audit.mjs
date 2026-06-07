@@ -3,7 +3,11 @@ import path from 'node:path';
 
 const root = process.cwd();
 const pageFile = path.join(root, 'src/lib/data/pages.ts');
-const pageSource = fs.readFileSync(pageFile, 'utf8');
+const competitorPageFile = path.join(root, 'src/lib/data/competitorPages.ts');
+const pageSource = [pageFile, competitorPageFile]
+  .filter((file) => fs.existsSync(file))
+  .map((file) => fs.readFileSync(file, 'utf8'))
+  .join('\n');
 const slugs = [...pageSource.matchAll(/slug:\s*'([^']+)'/g)].map((match) => match[1]);
 const titles = [...pageSource.matchAll(/title:\s*'([^']+)'/g)].map((match) => match[1]);
 const descriptions = [...pageSource.matchAll(/description:\s*'([^']+)'/g)].map((match) => match[1]);
@@ -78,6 +82,7 @@ const layoutSource = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf
 const calculatorSource = fs.readFileSync(path.join(root, 'src/components/Calculator.tsx'), 'utf8');
 const sitemapSource = fs.readFileSync(path.join(root, 'src/app/sitemap.ts'), 'utf8');
 const slugPageSource = fs.readFileSync(path.join(root, 'src/app/[slug]/page.tsx'), 'utf8');
+const jsonLdSource = fs.readFileSync(path.join(root, 'src/lib/seo/jsonLd.ts'), 'utf8');
 const adSlotSource = fs.readFileSync(path.join(root, 'src/components/AdSlot.tsx'), 'utf8');
 const unitsSource = fs.readFileSync(path.join(root, 'src/lib/calculators/units.ts'), 'utf8');
 const spacingSource = fs.readFileSync(path.join(root, 'src/lib/calculators/spacing.ts'), 'utf8');
@@ -170,7 +175,7 @@ assert(calculatorSource.includes('bulkFulfillmentMode') && calculatorSource.incl
 assert(calculatorSource.includes('canEstimateBags ? activeBagResult.bagsNeeded') && calculatorSource.includes('Volume needed'), 'Weight-only bag labels should not display a misleading 0 bags result');
 assert(sitemapSource.includes('...allPages.map'), 'Sitemap should include every page from allPages, not a restricted slug subset');
 assert(!sitemapSource.includes('indexedSlugs'), 'Sitemap should not use a restricted indexedSlugs whitelist');
-assert(slugPageSource.includes('url: `${SITE_URL}/${page.slug}`'), 'Calculator JSON-LD should use absolute SITE_URL URLs');
+assert(jsonLdSource.includes('const url = slug ? `${SITE_URL}/${slug}` : SITE_URL') && jsonLdSource.includes('const pageUrl = `${SITE_URL}/${page.slug}`'), 'Calculator JSON-LD should use absolute SITE_URL URLs');
 assert(adSlotSource.includes("'result'") && calculatorSource.includes('<AdSlot placement="result" />'), 'Result-area ad placeholder should be implemented inside the calculator result panel');
 assert(calculatorSource.includes('safeNonNegativeNumber') && calculatorSource.includes('setter(safeNonNegativeNumber(Number(raw)))'), 'Shared URL numeric parameters should be clamped to non-negative finite values');
 assert(calculatorSource.includes('Current inputs produce 0 soil volume'), 'Calculator should explain zero-volume results when quantity or dimensions are zero');
@@ -200,7 +205,7 @@ assert(fs.readFileSync(path.join(root, 'src/lib/calculators/topOff.ts'), 'utf8')
 assert(spacingSource.includes('lengthSquares') && spacingSource.includes('widthSquares'), 'Square-foot spacing should clamp each dimension before multiplying');
 assert(spacingSource.includes('Number.isFinite(input.customPlantsPerSquare)'), 'Square-foot custom plant density should sanitize non-finite values before multiplying');
 assert(homeSource.includes('export const metadata') && homeSource.includes("canonical: '/'"), 'Homepage should define explicit metadata and canonical URL');
-assert(homeSource.includes('url: SITE_URL') && homeSource.includes('potentialAction'), 'Homepage WebApplication JSON-LD should include SITE_URL and a calculator action target');
+assert(homeSource.includes('homeStructuredData') && jsonLdSource.includes('url: SITE_URL') && jsonLdSource.includes('potentialAction'), 'Homepage WebApplication JSON-LD should include SITE_URL and a calculator action target');
 assert(homeSource.includes('Enter bed size and bag size') && homeSource.includes('Load 4×8 presets'), 'Homepage hero should promise the concrete bed-size-to-shopping-list task');
 assert(calculatorSource.includes("(['raised', 'bags', 'bulk'] as const)") && calculatorSource.includes('More planners: mix, containers'), 'Homepage calculator should prioritize raised/bags/bulk while preserving more planners');
 assert(calculatorSource.includes('Advanced assumptions: freeboard and settling'), 'Raised bed advanced assumptions should be collapsible instead of blocking the core input path');

@@ -1,0 +1,23 @@
+BedSoil backlink and citation policy
+Generated: 2026-06-07T10:22:00+09:00
+
+BedSoil welcomes editorial citations from relevant gardening, DIY, education, calculator, and tool-resource pages when the link helps readers complete a soil-volume or buying-planning task.
+
+Allowed citation contexts
+- Tutorials that explain raised bed soil volume, bag counts, bulk-vs-bag decisions, compost or soil mix ratios, or seasonal top-off planning.
+- Tool directories that independently review calculators and disclose criteria.
+- Educational resource pages that link because the calculator is useful, not because of compensation.
+
+Not allowed
+- Paid links that pass PageRank.
+- PBNs, link farms, mass directory submissions, comment spam, forum spam, or exact-match anchor campaigns.
+- Reciprocal link swaps created mainly to influence rankings.
+- Outreach that hides affiliation or implies endorsement from a third-party site.
+
+Paid, sponsored, affiliate, or compensated links must use rel="sponsored" or rel="nofollow". User-generated placements should use rel="ugc" or rel="nofollow" when appropriate.
+
+Preferred citation
+BedSoil is a free raised bed soil calculator that estimates cubic feet, cubic yards, liters, bag counts, bulk-vs-bag cost checks, mix ratios, top-off amounts, and planting-layout planning from editable inputs.
+
+Canonical citation target
+https://bedsoil.ymirtool.com/raised-bed-soil-calculator

@@ -1,0 +1,32 @@
+# BedSoil AI crawler and citation policy
+
+Public calculator pages, comparison pages, source notes, and planning explanations may be crawled for search indexing, answer retrieval, citation, and user-initiated browsing when the crawler follows robots.txt and identifies itself accurately.
+
+Allowed search and answer-retrieval crawlers in robots.txt:
+- OAI-SearchBot
+- ChatGPT-User
+- PerplexityBot
+- ClaudeBot
+- GPTBot
+
+Training-oriented, bulk-scraping, or ambiguous AI crawlers may be blocked separately from search crawlers. Current blocked examples include CCBot, Google-Extended, anthropic-ai, Bytespider, cohere-ai, Diffbot, FacebookBot, and Amazonbot.
+
+Acceptable use:
+- Indexing public calculator and comparison pages.
+- Citing exact BedSoil URLs as planning tools.
+- Summarizing visible formulas, limitations, comparison disclosures, source-boundary notes, and correction guidance.
+- Using /llms.txt and /geo-citations.json to identify key public pages and facts.
+
+Do not:
+- Present BedSoil estimates as professional agricultural, pest, disease, environmental, medical, engineering, or soil-test advice.
+- Ignore page-level disclaimers, methodology, source-boundary notes, or comparison disclosures.
+- Attribute non-public user inputs or private calculations to BedSoil.
+- Infer competitor pricing, rankings, reviews, endorsements, or hidden features from BedSoil comparison pages.
+- Circumvent robots.txt, rate limits, or access controls.
+
+Machine-readable references:
+- https://bedsoil.ymirtool.com/llms.txt
+- https://bedsoil.ymirtool.com/geo-citations.json
+- https://bedsoil.ymirtool.com/rsl.xml
+
+Contact: ymirtool@ymirtool.com

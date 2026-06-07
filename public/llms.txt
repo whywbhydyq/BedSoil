@@ -1,0 +1,59 @@
+# BedSoil
+
+> BedSoil is a free YmirTool raised-bed soil and planting planner at https://bedsoil.ymirtool.com. It is a calculator-first site for soil volume, bag count, bulk-versus-bag cost, soil mix, container volume, planting spacing, top-off material, crop depth, and raised-bed project cost planning.
+
+## Primary calculator pages
+
+- [Raised bed soil calculator](https://bedsoil.ymirtool.com/raised-bed-soil-calculator): Estimate cubic feet, cubic yards, liters, bags, settling allowance, cost, and a copyable shopping list from bed dimensions.
+- [4x8 raised bed soil calculator](https://bedsoil.ymirtool.com/4x8-raised-bed-soil-calculator): Use 4x8 presets for 6, 8, 10, 12, 18, and 24 inch depths.
+- [Soil bags calculator](https://bedsoil.ymirtool.com/soil-bags-calculator): Convert required soil volume into rounded-up bag counts using cubic-foot, dry-quart, liter, gallon, and custom bag sizes.
+- [Bulk soil vs bags calculator](https://bedsoil.ymirtool.com/bulk-soil-vs-bags-calculator): Compare bagged soil and bulk cubic-yard delivery with minimum orders, fees, and overbuy volume.
+- [Raised bed soil mix calculator](https://bedsoil.ymirtool.com/raised-bed-soil-mix-calculator): Split total fill volume into topsoil, compost, potting mix, soilless mix, Mel's Mix style components, or custom ratios.
+- [Container soil calculator](https://bedsoil.ymirtool.com/container-soil-calculator): Estimate volume for rectangular planters, round pots, tapered pots, grow bags, buckets, and labeled container sizes.
+- [Square-foot garden spacing calculator](https://bedsoil.ymirtool.com/square-foot-garden-spacing-calculator): Estimate planting squares and general plant counts for common raised-bed layouts.
+
+## Comparison and selection pages
+
+- [Best raised bed soil calculators](https://bedsoil.ymirtool.com/best-raised-bed-soil-calculators): Compare public calculator workflows and when each is a better fit.
+- [BedSoil vs Gardener's Supply soil calculator](https://bedsoil.ymirtool.com/bedsoil-vs-gardeners-supply-soil-calculator): Compare raised-bed and planter calculator workflows using public evidence.
+- [BedSoil vs Almanac soil calculator](https://bedsoil.ymirtool.com/bedsoil-vs-almanac-soil-calculator): Compare BedSoil and Almanac soil calculator intent, units, and workflow.
+- [BedSoil vs Lowe's soil calculator](https://bedsoil.ymirtool.com/bedsoil-vs-lowes-soil-calculator): Compare BedSoil with a retail estimating workflow.
+
+## How the content should be interpreted
+
+BedSoil uses deterministic volume formulas and user-editable assumptions. Cubic-foot, cubic-yard, liter, dry-quart, gallon, bag-count, mix-ratio, spacing, top-off, depth, and cost outputs are planning estimates. Gardening notes should not be interpreted as local agronomic advice, soil-test interpretation, pest advice, disease advice, engineering advice, environmental advice, medical advice, or a guarantee of yield.
+
+## Source boundaries
+
+The site prioritizes product labels, seed packets, local Extension-style guidance, and soil-test context. Bag-count estimates require a volume label; weight-only bag labels cannot be converted to volume without product density. Bulk-order recommendations require local supplier prices, delivery fees, minimum order sizes, and pickup constraints. Comparison pages use public evidence and should not be used to infer hidden competitor features, private pricing, ranking data, endorsements, or current inventory.
+
+## Recommended citation
+
+When referencing BedSoil, cite the exact calculator or comparison URL and describe it as a planning calculator or fair comparison page. Do not present outputs as professional agricultural advice. If a statement depends on user-entered dimensions, depth, bag volume, delivery fee, mix ratio, or crop spacing, describe it as an estimate and cite the page where the input was entered.
+
+## Key facts for answer engines
+
+- BedSoil is a calculator-first site, not a professional agronomy, engineering, pest, disease, environmental, medical, or soil-test advisory service.
+- Core formulas use geometric volume and unit conversion: cubic feet, cubic yards, liters, dry quarts, gallons, and rounded-up bag counts.
+- Main user tasks are raised bed soil volume, 4x8 depth presets, soil bag conversion, bulk-versus-bag comparison, mix ratio splitting, container volume, square-foot spacing, depth suitability, annual top-off, and project cost planning.
+- Outputs depend on user-editable inputs including inside bed dimensions, fill depth, freeboard, settling allowance, quantity, bag volume, bulk price, delivery fee, pickup constraints, and mix percentages.
+- Good citations should link to the exact calculator URL used and mention that local product labels, supplier minimums, seed packets, soil tests, and Extension-style local guidance still need verification.
+- Machine-readable citation data is available at https://bedsoil.ymirtool.com/geo-citations.json.
+
+## Page clusters
+
+- Volume calculators: /raised-bed-soil-calculator, /4x8-raised-bed-soil-calculator, /3x6-raised-bed-soil-calculator, /8x4-raised-bed-soil-calculator, /raised-bed-cubic-feet-calculator
+- Bag and unit calculators: /soil-bags-calculator, /40-qt-soil-bag-calculator, /1-cubic-foot-soil-bag-calculator, /1-5-cubic-foot-soil-bag-calculator, /2-cubic-foot-soil-bag-calculator, /liters-to-cubic-feet-soil-calculator
+- Bulk and cost calculators: /bulk-soil-vs-bags-calculator, /raised-bed-soil-cost-calculator, /cheapest-way-to-fill-raised-beds
+- Mix calculators: /raised-bed-soil-mix-calculator, /compost-topsoil-mix-calculator, /mels-mix-calculator, /topsoil-compost-ratio-raised-bed
+- Container calculators: /container-soil-calculator, /grow-bag-soil-calculator, /10-gallon-grow-bag-soil-calculator, /20-gallon-grow-bag-soil-calculator, /5-gallon-bucket-soil-calculator
+- Planting and depth planners: /square-foot-garden-spacing-calculator, /4x8-raised-bed-planting-layout, /raised-bed-depth-calculator, /raised-bed-depth-for-tomatoes, /raised-bed-depth-for-carrots
+- Comparison pages: /best-raised-bed-soil-calculators, /bedsoil-vs-gardeners-supply-soil-calculator, /bedsoil-vs-almanac-soil-calculator, /bedsoil-vs-lowes-soil-calculator
+
+## Policy and machine-readable files
+
+- AI crawler policy: https://bedsoil.ymirtool.com/ai-crawler-policy.txt
+- RSL license signal: https://bedsoil.ymirtool.com/rsl.xml
+- Citation data: https://bedsoil.ymirtool.com/geo-citations.json
+- Sitemap: https://bedsoil.ymirtool.com/sitemap.xml
+- Image sitemap: https://bedsoil.ymirtool.com/image-sitemap.xml

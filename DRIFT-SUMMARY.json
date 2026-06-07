@@ -1,0 +1,165 @@
+{
+  "cache_type": "drift",
+  "analyzed_at": "2026-06-07T10:48:35+00:00",
+  "source": "local static project drift guardrail scan",
+  "domain": "https://bedsoil.ymirtool.com",
+  "baseline_project_zip": "BedSoil_seo_backlinks_rerun_completed.zip",
+  "slug_count": 74,
+  "checks_total": 17,
+  "checks": [
+    {
+      "id": "slug-count",
+      "status": "pass",
+      "detail": "74 slugs detected in src/lib/data/pages.ts."
+    },
+    {
+      "id": "sitemap-stable-lastmod",
+      "status": "pass",
+      "detail": "Sitemap uses stable page-level lastModified helper."
+    },
+    {
+      "id": "robots-sitemaps",
+      "status": "pass",
+      "detail": "robots.ts references both standard and image sitemaps."
+    },
+    {
+      "id": "csp-present",
+      "status": "pass",
+      "detail": "CSP and frame-ancestors configured in next.config.ts."
+    },
+    {
+      "id": "hsts-present",
+      "status": "pass",
+      "detail": "HSTS header configured."
+    },
+    {
+      "id": "jsonld-graph",
+      "status": "pass",
+      "detail": "JSON-LD graph and safe serializer are present."
+    },
+    {
+      "id": "schema-contact-page",
+      "status": "pass",
+      "detail": "ContactPage schema is available for contact route."
+    },
+    {
+      "id": "image-sitemap-route",
+      "status": "pass",
+      "detail": "Image sitemap route exists."
+    },
+    {
+      "id": "llms-file",
+      "status": "pass",
+      "detail": "llms.txt includes citation guidance."
+    },
+    {
+      "id": "ai-policy",
+      "status": "pass",
+      "detail": "AI crawler policy exists with search/reference boundary."
+    },
+    {
+      "id": "rsl",
+      "status": "pass",
+      "detail": "RSL license signal is linked from layout."
+    },
+    {
+      "id": "backlink-policy",
+      "status": "pass",
+      "detail": "White-hat backlink policy asset exists."
+    },
+    {
+      "id": "comparison-pages-modeled",
+      "status": "pass",
+      "detail": "Four comparison pages are present and modeled."
+    },
+    {
+      "id": "programmatic-cache",
+      "status": "pass",
+      "detail": "Programmatic cache exists."
+    },
+    {
+      "id": "performance-cache",
+      "status": "pass",
+      "detail": "Performance cache exists."
+    },
+    {
+      "id": "no-meta-keywords",
+      "status": "pass",
+      "detail": "No runtime meta keywords detected in checked entry points."
+    },
+    {
+      "id": "ads-lazy",
+      "status": "pass",
+      "detail": "AdSense auto ads are lazy loaded and manual slots are viewport gated."
+    }
+  ],
+  "counts": {
+    "pass": 17,
+    "warning": 0,
+    "critical": 0,
+    "info": 0
+  },
+  "static_drift_readiness_score": 100,
+  "tracked_cache_files": [
+    "audit-scores.json",
+    "backlinks.json",
+    "cluster.json",
+    "competitor-pages.json",
+    "content.json",
+    "drift.json",
+    "flow.json",
+    "geo.json",
+    "images.json",
+    "pages/4x8-raised-bed-soil-calculator/performance.json",
+    "pages/4x8-raised-bed-soil-calculator/visual.json",
+    "pages/bedsoil-vs-almanac-soil-calculator/competitor-page.json",
+    "pages/bedsoil-vs-almanac-soil-calculator/programmatic.json",
+    "pages/bedsoil-vs-gardeners-supply-soil-calculator/competitor-page.json",
+    "pages/bedsoil-vs-gardeners-supply-soil-calculator/flow.json",
+    "pages/bedsoil-vs-gardeners-supply-soil-calculator/programmatic.json",
+    "pages/bedsoil-vs-lowes-soil-calculator/competitor-page.json",
+    "pages/bedsoil-vs-lowes-soil-calculator/programmatic.json",
+    "pages/best-raised-bed-soil-calculators/competitor-page.json",
+    "pages/best-raised-bed-soil-calculators/flow.json",
+    "pages/best-raised-bed-soil-calculators/geo.json",
+    "pages/best-raised-bed-soil-calculators/programmatic.json",
+    "pages/calculator-template/content.json",
+    "pages/calculator-template/images.json",
+    "pages/calculator-template/page-analysis.json",
+    "pages/calculator-template/performance.json",
+    "pages/home/content.json",
+    "pages/home/geo.json",
+    "pages/home/page-analysis.json",
+    "pages/home/performance.json",
+    "pages/homepage/images.json",
+    "pages/homepage/visual.json",
+    "pages/raised-bed-soil-calculator/flow.json",
+    "pages/raised-bed-soil-calculator/geo.json",
+    "pages/sitewide-page-analysis.json",
+    "performance.json",
+    "plan.json",
+    "programmatic.json",
+    "schema.json",
+    "site-meta.json",
+    "sitemap.json",
+    "sxo.json",
+    "visual.json"
+  ],
+  "key_findings": [
+    "SEO-critical infrastructure is currently stable in static source inspection.",
+    "Live drift baselines require deployed URLs and should be captured after preview/production deployment.",
+    "Core Web Vitals drift comparisons require PageSpeed API or GSC/CrUX data; current workflow records null CWV when unavailable."
+  ],
+  "issues": [],
+  "recommendations": [
+    "Capture live baselines immediately after deployment for /, /raised-bed-soil-calculator, /4x8-raised-bed-soil-calculator, /soil-bags-calculator, /best-raised-bed-soil-calculators, /sitemap.xml, and /image-sitemap.xml.",
+    "Run drift_compare after each deployment before promoting preview to production.",
+    "Treat noindex additions, canonical host changes, sitemap loss, JSON-LD removal, and status-code regressions as release blockers."
+  ],
+  "tool_limitations": [
+    "No npm run build executed.",
+    "No tests executed.",
+    "No live URL crawl executed because this run used the local project package.",
+    "No PageSpeed/GSC credentials were available for field CWV drift."
+  ]
+}

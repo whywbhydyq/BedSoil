@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rsl xmlns="https://rslstandard.org/rsl">
+  <content url="/">
+    <license>
+      <permits type="usage">search</permits>
+      <permits type="usage">citation</permits>
+      <payment type="attribution">
+        <custom>https://bedsoil.ymirtool.com/ai-crawler-policy.txt</custom>
+      </payment>
+    </license>
+  </content>
+  <content url="/geo-citations.json">
+    <license>
+      <permits type="usage">search</permits>
+      <permits type="usage">citation</permits>
+      <payment type="attribution">
+        <custom>https://bedsoil.ymirtool.com/ai-crawler-policy.txt</custom>
+      </payment>
+    </license>
+  </content>
+</rsl>
