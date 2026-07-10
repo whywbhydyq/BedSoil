@@ -36,9 +36,7 @@ import {
   volumeToFt3,
   type CalculatorWarning,
 } from '@/lib/calculators';
-import { AdSlot } from '@/components/AdSlot';
 import { BAG_PRESETS, RAISED_BED_PRESETS, SOIL_MIX_TEMPLATES } from '@/lib/data/presets';
-import { flowNextStepsForMode } from '@/lib/data/flow';
 import { fmt, plantText } from '@/lib/utils/format';
 
 type Tab = 'raised' | 'bags' | 'bulk' | 'mix' | 'containers' | 'spacing' | 'topoff' | 'depth' | 'cost' | 'multi' | 'shapes';
@@ -52,11 +50,6 @@ type FormSubmitEvent = { preventDefault: () => void };
 function safeNonNegativeNumber(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, value);
-}
-
-function wholeQuantity(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.floor(Math.max(0, value));
 }
 
 function NumberInput({ label, value, setValue, step = 1 }: { label: string; value: number; setValue: (value: number) => void; step?: number }) {
@@ -79,64 +72,6 @@ function warningKey(warning: CalculatorWarning) {
 function warningsText(warnings: CalculatorWarning[]) {
   return warnings.map((warning) => `[${warning.severity}] ${warning.message}`).join('\n');
 }
-
-const fastPathByTab: Record<Tab, { title: string; detail: string }[]> = {
-  raised: [
-    { title: '1. Confirm the bed preset', detail: 'Check length, width, depth, quantity, freeboard, and settling allowance.' },
-    { title: '2. Read the volume cards', detail: 'Use cubic feet, cubic yards, bag count, and warnings before buying material.' },
-    { title: '3. Export the shopping list', detail: 'Copy, print, download, or share the result once assumptions are stable.' },
-  ],
-  bags: [
-    { title: '1. Choose volume source', detail: 'Use bed dimensions or enter a known volume from another estimate.' },
-    { title: '2. Match the package label', detail: 'Use ft³, dry qt, L, or gal; avoid weight-only labels for volume math.' },
-    { title: '3. Round once', detail: 'Use the rounded bag count and leftover note before visiting a store.' },
-  ],
-  bulk: [
-    { title: '1. Set required volume', detail: 'Use bed dimensions or manual cubic feet before comparing suppliers.' },
-    { title: '2. Add real supplier terms', detail: 'Include cubic-yard price, delivery fee, pickup cost, minimums, and overbuy.' },
-    { title: '3. Confirm before ordering', detail: 'Treat the recommendation as planning guidance until the supplier confirms terms.' },
-  ],
-  mix: [
-    { title: '1. Set total fill volume', detail: 'Calculate or enter the volume that needs to be split into components.' },
-    { title: '2. Verify the ratio', detail: 'Make sure component percentages total 100% before using the output.' },
-    { title: '3. Check local fit', detail: 'Use the split as volume math, not a substitute for soil testing or local guidance.' },
-  ],
-  containers: [
-    { title: '1. Match the container type', detail: 'Choose grow bag, rectangular planter, round pot, or tapered pot.' },
-    { title: '2. Check fill-line assumptions', detail: 'Nominal gallons, folds, taper, and drainage space can change usable volume.' },
-    { title: '3. Convert to bags', detail: 'Use cubic feet, liters, dry quarts, and package counts before buying mix.' },
-  ],
-  spacing: [
-    { title: '1. Choose crop and grid', detail: 'Use the crop selector and bed area to draft the square-foot layout.' },
-    { title: '2. Verify variety spacing', detail: 'Check seed packet, trellis, airflow, and harvest style before planting.' },
-    { title: '3. Save the layout', detail: 'Print or copy the plan, then move to depth or soil-volume checks.' },
-  ],
-  topoff: [
-    { title: '1. Measure the soil drop', detail: 'Use the actual gap below the rim before planning top-off material.' },
-    { title: '2. Choose material depth', detail: 'Estimate compost, soil, or mix volume using seasonal assumptions.' },
-    { title: '3. Verify material choice', detail: 'Separate top-off, mulch, and amendment decisions before buying.' },
-  ],
-  depth: [
-    { title: '1. Choose crop and depth', detail: 'Compare planned bed depth with conservative crop-depth ranges.' },
-    { title: '2. Check the base', detail: 'A hard surface below the bed changes how much depth matters.' },
-    { title: '3. Route to soil volume', detail: 'Move from suitability screening to the matching fill-volume calculator.' },
-  ],
-  cost: [
-    { title: '1. Enter material assumptions', detail: 'Set soil, compost, kit, hardware, delivery, and tax inputs.' },
-    { title: '2. Compare full cost', detail: 'Review per-bed and total cost before choosing bags or bulk.' },
-    { title: '3. Export the budget', detail: 'Copy or print the estimate for supplier checks.' },
-  ],
-  multi: [
-    { title: '1. Add every bed', detail: 'Combine multiple beds and containers before rounding purchase quantities.' },
-    { title: '2. Review combined volume', detail: 'Use total cubic feet, cubic yards, and bag count as the order basis.' },
-    { title: '3. Export one list', detail: 'Create one shopping list instead of separate over-rounded estimates.' },
-  ],
-  shapes: [
-    { title: '1. Select the shape', detail: 'Choose round, L-shaped, U-shaped, or another approximation path.' },
-    { title: '2. Check assumptions', detail: 'Read the shape formula and approximation warning before trusting the number.' },
-    { title: '3. Cross-check volume', detail: 'Convert to bags or bulk and compare with a rectangular sanity check if needed.' },
-  ],
-};
 
 
 async function writeClipboardText(value: string): Promise<boolean> {
@@ -535,7 +470,7 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
     return { templateId: 'custom', components: withBagEstimate(components) };
   }, [mix, customTopsoil, customCompost, customPotting, bagSize, bagUnit, bagPrice]);
   const containerResult = useMemo(() => {
-    if (containerMode === 'grow') return calculateGrowBagVolume({ gallons: growGallonsOne * wholeQuantity(growQtyOne) + growGallonsTwo * wholeQuantity(growQtyTwo), quantity: 1 });
+    if (containerMode === 'grow') return calculateGrowBagVolume({ gallons: growGallonsOne * growQtyOne + growGallonsTwo * growQtyTwo, quantity: 1 });
     if (containerMode === 'round') return calculateRoundPotVolume({ diameter: containerWidth, height: containerDepth, unit: 'in', quantity: containerQty });
     if (containerMode === 'taper') return calculateTaperedPotVolume({ topDiameter: containerWidth, bottomDiameter, height: containerDepth, unit: 'in', quantity: containerQty });
     return calculateRectangularPlanterVolume({ length: containerLength, width: containerWidth, depth: containerDepth, unit: 'in', quantity: containerQty });
@@ -623,7 +558,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
   const spacingShoppingList = `BedSoil spacing plan\nActive tool: ${tab}\nGrid: ${gridLength} ft × ${gridWidth} ft = ${spacingResult.totalSquares} square-foot cells\nCrop: ${spacingResult.crop?.name ?? 'custom crop'}\nPlants per square foot: ${plantText(spacingResult.plantsPerSquareFoot)}\nEstimated plants: ${plantText(spacingResult.totalPlants)}\nBoundary: verify seed packet spacing, mature plant size, support plan, airflow, and local Extension guidance before planting.`;
   const depthShoppingList = `BedSoil depth check\nActive tool: ${tab}\nCrop: ${spacingResult.crop?.name ?? 'custom crop'}\nBed depth: ${depth} ${depthUnit}\nStatus: ${depthResult.status}\nResult: ${depthResult.message}\nBoundary: depth suitability depends on variety, native soil or hard surface, drainage, irrigation, and local Extension guidance.`;
   const shoppingList = tab === 'spacing' ? spacingShoppingList : tab === 'depth' ? depthShoppingList : volumeShoppingList;
-  const flowNextSteps = flowNextStepsForMode(tab);
 
   function createShareUrl() {
     const params = new URLSearchParams({
@@ -651,8 +585,8 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
 
   async function copyShareUrl() {
     const url = createShareUrl();
+    window.history.replaceState(null, '', url.replace(window.location.origin, ''));
     const ok = await writeClipboardText(url);
-    if (ok) window.history.replaceState(null, '', url.replace(window.location.origin, ''));
     trackCalculatorEvent(ok ? 'copy_share_url' : 'copy_share_url_failed', { tab });
     setShared(ok);
     window.setTimeout(() => setShared(false), 1400);
@@ -800,12 +734,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
         <span className="status-badge status-info">Planning estimate</span>
       </div>
 
-      <div className="sxo-start-strip" aria-label="Fast path from search intent to calculator result">
-        {fastPathByTab[tab].map((step) => (
-          <div key={step.title}><b>{step.title}</b><span>{step.detail}</span></div>
-        ))}
-      </div>
-
       <div className="tabs primary-tabs" aria-label="Primary calculator tabs">
         {(['raised', 'bags', 'bulk'] as const).map((item) => (
           <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); trackCalculatorEvent('tab_change', { tab: item }); }}>{item}</button>
@@ -905,9 +833,9 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
               {containerMode === 'grow' ? (
                 <>
                   <NumberInput label="Group 1 gallons" value={growGallonsOne} setValue={setGrowGallonsOne} />
-                  <NumberInput label="Group 1 quantity" value={growQtyOne} setValue={setGrowQtyOne} step={1} />
+                  <NumberInput label="Group 1 quantity" value={growQtyOne} setValue={setGrowQtyOne} />
                   <NumberInput label="Group 2 gallons" value={growGallonsTwo} setValue={setGrowGallonsTwo} />
-                  <NumberInput label="Group 2 quantity" value={growQtyTwo} setValue={setGrowQtyTwo} step={1} />
+                  <NumberInput label="Group 2 quantity" value={growQtyTwo} setValue={setGrowQtyTwo} />
                 </>
               ) : (
                 <>
@@ -1020,24 +948,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             <button type="button" onClick={copyShareUrl}>{shared ? 'URL copied' : 'Copy share URL'}</button>
           </div>
 
-          <div className="flow-result-completion" aria-label="Calculator completion flow">
-            <p className="eyebrow">Finish this planning flow</p>
-            <h3>Save the result, then choose the next calculator.</h3>
-            <ol>
-              <li>Copy or print the focused result before buying materials.</li>
-              <li>Check warnings, package volume labels, and local delivery minimums.</li>
-              <li>Use one next-step route below to continue the planning path.</li>
-            </ol>
-            <div className="flow-next-step-grid compact-flow-links">
-              {flowNextSteps.map((step) => (
-                <a key={step.href} href={step.href} onClick={() => trackCalculatorEvent('flow_next_step_click', { tab, target: step.href })}>
-                  <span>{step.label}</span>
-                  <small>{step.reason}</small>
-                </a>
-              ))}
-            </div>
-          </div>
-
           {isVolumeTask ? (
             <div className="result-card-grid volume-result-cards">
               <div className="result-card"><span>Bags needed</span><strong>{activeBagResult.canEstimateBags ? activeBagResult.bagsNeeded : 'Volume needed'}</strong><small>{activeBagResult.canEstimateBags ? `${bagSize} ${bagUnit} · leftover ${fmt(activeBagResult.leftoverFt3)} ft³` : 'Use package ft³, dry qt, L, or gal instead of lb/kg.'}</small></div>
@@ -1061,7 +971,6 @@ export function Calculator({ initial = 'raised', presetSlug }: { initial?: Tab; 
             </div>
           )}
 
-          <AdSlot placement="result" />
 
           {isVolumeTask ? (
             <div className="metric-group" aria-label="Volume conversions">

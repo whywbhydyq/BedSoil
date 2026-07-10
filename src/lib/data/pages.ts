@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
-import { SITE_NAME, SITE_PUBLISHER, SITE_URL } from '@/lib/site';
-import { PRIMARY_OG_IMAGE, previewAltForTitle } from '@/lib/data/imageSeo';
-import { competitorPageDefinitions } from '@/lib/data/competitorPages';
+import { isIndexableSlug } from '@/lib/publicPolicy';
 
 export type PageDefinition = {
   slug: string;
@@ -13,7 +11,6 @@ export type PageDefinition = {
   notes?: string[];
   related?: string[];
   legal?: string[];
-  comparison?: string;
 };
 
 export const calculatorPages: PageDefinition[] = [
@@ -94,181 +91,38 @@ export const legalPages: PageDefinition[] = [
   { slug: 'affiliate-disclosure', title: 'Affiliate Disclosure', description: 'Affiliate disclosure for BedSoil.', legal: ['BedSoil may include affiliate links to gardening products. If you buy through those links, the site may earn a commission at no extra cost to you.', 'Affiliate placements should not change calculator formulas or estimates.'] },
 ];
 
-export const allPages = [...calculatorPages, ...legalPages, ...competitorPageDefinitions];
-
-const metadataTitleOverrides: Record<string, string> = {
-  'raised-bed-soil-calculator': 'Raised Bed Soil Calculator for Garden Beds',
-  '4x8-raised-bed-soil-calculator': '4x8 Raised Bed Soil Calculator by Depth Guide',
-  'soil-bags-calculator': 'Soil Bags Calculator - Convert Volume to Bags',
-  'bulk-soil-vs-bags-calculator': 'Bulk Soil vs Bags Cost Calculator Guide Tool',
-  'raised-bed-depth-calculator': 'Raised Bed Depth Calculator for Common Crops',
-};
-
-const comparisonTitleOverrides: Record<string, string> = {
-  'best-raised-bed-soil-calculators': 'Best Raised Bed Soil Calculators Compared 2026',
-  'bedsoil-vs-gardeners-supply-soil-calculator': 'BedSoil vs Gardener’s Supply Calculator 2026',
-  'bedsoil-vs-almanac-soil-calculator': 'BedSoil vs Almanac Soil Calculator Compared 2026',
-  'bedsoil-vs-lowes-soil-calculator': 'BedSoil vs Lowe’s Soil Calculator Compared 2026',
-};
-
-const legalTitleOverrides: Record<string, string> = {
-  about: 'About BedSoil Soil Calculator & Method Scope',
-  privacy: 'BedSoil Privacy Policy for Calculator Users',
-  terms: 'BedSoil Calculator Terms of Use & Policy Scope',
-  disclaimer: 'BedSoil Soil Calculator Planning Disclaimer',
-  contact: 'Contact BedSoil Calculator Support & Feedback',
-  'affiliate-disclosure': 'BedSoil Affiliate Disclosure & Ad Policy',
-};
-
-const metadataDescriptionOverrides: Record<string, string> = {
-  'best-raised-bed-soil-calculators': 'Compare BedSoil with Gardener’s Supply, Almanac, Lowe’s, and SoilCalculator.com using public feature evidence, source notes, limits, and best-fit guidance.',
-  'bedsoil-vs-gardeners-supply-soil-calculator': 'Compare BedSoil and Gardener’s Supply soil calculators by raised-bed outputs, planter support, bag planning, bulk cost, source notes, and use cases.',
-  'bedsoil-vs-almanac-soil-calculator': 'Compare BedSoil and The Old Farmer’s Almanac soil calculator by intent, dimensions, bag planning, methodology, and next-step workflow.',
-  'bedsoil-vs-lowes-soil-calculator': 'Compare BedSoil and Lowe’s mulch and soil calculator by retail context, estimating scope, bag or bulk planning, transparency, and user intent.',
-  'raised-bed-soil-calculator': 'Enter raised bed dimensions and bag size to estimate cubic feet, cubic yards, liters, bags, settling allowance, cost, and a copyable shopping list.',
-  '4x8-raised-bed-soil-calculator': 'Use 4x8 presets for 6, 8, 10, 12, 18, and 24 inch depths and estimate cubic feet, cubic yards, liters, bags, and shopping list quantities.',
-  'soil-bags-calculator': 'Enter required soil volume and bag size to estimate how many soil bags to buy, including 40 qt, 1 ft³, 1.5 ft³, 2 ft³, liter, gallon, and dry quart presets.',
-  'bulk-soil-vs-bags-calculator': 'Compare bagged soil with bulk cubic-yard delivery, minimum order, delivery fee, pickup cost, overbuy, and estimated savings.',
-  'raised-bed-depth-calculator': 'Check whether a raised bed depth is generally suitable for common crops using planning assumptions for tomatoes, peppers, carrots, herbs, and greens.',
-};
-
-const titleSuffixByMode: Record<NonNullable<PageDefinition['initial']>, string> = {
-  raised: 'Volume & Bags',
-  bags: 'Bag Count Guide',
-  bulk: 'Cost Comparison',
-  mix: 'Mix Ratio Guide',
-  containers: 'Pot Volume Guide',
-  spacing: 'Plant Count Guide',
-  topoff: 'Top-Off Volume',
-  depth: 'Crop Depth Guide',
-  cost: 'Project Cost Guide',
-  multi: 'Multiple Bed Totals',
-  shapes: 'Shape Volume Guide',
-};
-
-const metaIntentByMode: Record<NonNullable<PageDefinition['initial']>, string> = {
-  raised: 'Use editable bed dimensions to calculate soil volume, bag count, settling allowance, and the next buying step.',
-  bags: 'Convert required soil volume into practical bag counts with rounded-up quantities and leftover-volume notes.',
-  bulk: 'Compare bagged soil with bulk delivery or pickup using order minimums, fees, overbuy, and cost-per-volume checks.',
-  mix: 'Split a raised bed fill into soil, compost, potting mix, or custom components while checking percentage assumptions.',
-  containers: 'Estimate potting mix for containers, grow bags, buckets, or pots using volume units that appear on product labels.',
-  spacing: 'Estimate square-foot garden plant counts and review spacing limits before choosing a planting layout.',
-  topoff: 'Estimate annual compost or soil top-off volume after settling, decomposition, or seasonal bed maintenance.',
-  depth: 'Check whether a raised bed depth is generally suitable for common crops and when deeper soil is safer.',
-  cost: 'Estimate project cost from soil, compost, lumber or kit, hardware, delivery, tax, and per-bed totals.',
-  multi: 'Add several beds or containers together so one shopping list covers the full garden project.',
-  shapes: 'Estimate soil volume for round, L-shaped, U-shaped, or non-rectangular raised beds with explicit assumptions.',
-};
-
-const comparisonMetaIntent = 'Includes a balanced matrix, affiliation disclosure, public source notes, and calculator links for users choosing a planning workflow.';
-
-const legalMetaIntent: Record<string, string> = {
-  about: 'Learn who maintains BedSoil, what the calculator covers, and how its raised bed soil estimates should be used.',
-  privacy: 'Review what privacy information applies when using BedSoil calculators, feedback forms, analytics, and advertising.',
-  terms: 'Read the usage terms for BedSoil calculators, planning estimates, site content, and acceptable use.',
-  disclaimer: 'Understand the planning limits behind BedSoil soil, bag, cost, crop depth, and planting-layout estimates.',
-  contact: 'Contact BedSoil about calculator issues, correction requests, partnerships, or feedback with the page URL and inputs.',
-  'affiliate-disclosure': 'Review how affiliate links may appear on BedSoil and how they are separated from calculator formulas.',
-};
-
-function cleanSentence(value: string): string {
-  return value.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
-}
-
-function titleForSearch(page: PageDefinition): string {
-  const override = metadataTitleOverrides[page.slug];
-  if (override) return override;
-  if (page.legal) {
-    return legalTitleOverrides[page.slug] ?? page.title;
-  }
-  if (page.comparison) {
-    return comparisonTitleOverrides[page.slug] ?? page.title;
-  }
-
-  const suffix = page.initial ? titleSuffixByMode[page.initial] : 'Planning Guide';
-  const base = page.title;
-  if (base.includes(suffix)) return base;
-  const candidate = `${base} - ${suffix}`;
-  let title = candidate.length <= 50 ? candidate : base;
-  if (title.length < 40) {
-    const titleAdditions = [' Guide', ' Tool', ' Planner', ' Estimates', ' Buying Guide'];
-    const augmented = titleAdditions.find((addition) => title.length + addition.length >= 40 && title.length + addition.length <= 50);
-    if (augmented) title = `${title}${augmented}`;
-  }
-  if (title.length <= 50) return title;
-  return title
-    .replace(' Calculator', '')
-    .replace(' Raised Bed', ' Bed')
-    .slice(0, 50)
-    .replace(/[-\s]+$/, '');
-}
-
-function fitMetaDescription(value: string): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (normalized.length >= 145 && normalized.length <= 160) return normalized;
-  if (normalized.length < 145) {
-    return fitMetaDescription(`${normalized} Includes formulas, examples, assumptions, limits, and source notes.`);
-  }
-
-  const sentenceBoundary = normalized.slice(0, 161).lastIndexOf('.');
-  if (sentenceBoundary >= 145) return normalized.slice(0, sentenceBoundary + 1);
-
-  const wordBoundary = normalized.slice(0, 157).replace(/\s+\S*$/, '').trim();
-  const shortened = `${wordBoundary}.`;
-  if (shortened.length >= 145) return shortened;
-  return `${shortened.replace(/\.$/, '')}; check inputs.`;
-}
-
-function descriptionForSearch(page: PageDefinition): string {
-  const base = cleanSentence(metadataDescriptionOverrides[page.slug] ?? page.description);
-  const intent = page.legal
-    ? legalMetaIntent[page.slug] ?? 'Review BedSoil policy, scope, correction, contact, and usage information for calculator users.'
-    : page.comparison
-      ? comparisonMetaIntent
-      : page.initial
-        ? metaIntentByMode[page.initial]
-        : 'Use editable inputs and visible assumptions to plan soil, bags, cost, and planting decisions.';
-  return fitMetaDescription(`${base}. ${intent}`);
-}
+export const allPages = [...calculatorPages, ...legalPages];
 
 export function pageMetadata(page: PageDefinition): Metadata {
-  const title = titleForSearch(page);
-  const description = descriptionForSearch(page);
-  const canonical = `/${page.slug}`;
-  const absoluteUrl = `${SITE_URL}${canonical}`;
-  const previewAlt = previewAltForTitle(page.title);
-
+  const overrides: Record<string, readonly [string, string]> = {
+    'raised-bed-soil-calculator': [
+      'Raised Bed Soil Calculator for Garden Beds',
+      'Enter raised bed dimensions and bag size to estimate cubic feet, cubic yards, liters, bags, settling allowance, cost, and a copyable shopping list.',
+    ],
+    '4x8-raised-bed-soil-calculator': [
+      '4x8 Raised Bed Soil Calculator by Depth',
+      'Use 4x8 presets for 6, 8, 10, 12, 18, and 24 inch depths and estimate cubic feet, cubic yards, liters, bags, and shopping list quantities.',
+    ],
+    'soil-bags-calculator': [
+      'Soil Bags Calculator - Convert Soil Volume to Bags',
+      'Enter required soil volume and bag size to estimate how many soil bags to buy, including 40 qt, 1 ft³, 1.5 ft³, 2 ft³, liter, gallon, and dry quart presets.',
+    ],
+    'bulk-soil-vs-bags-calculator': [
+      'Bulk Soil vs Bags Calculator - Compare Delivery and Bag Cost',
+      'Compare bagged soil with bulk cubic-yard delivery, minimum order, delivery fee, pickup cost, overbuy, and estimated savings.',
+    ],
+    'raised-bed-depth-calculator': [
+      'Raised Bed Depth Calculator for Common Crops',
+      'Check whether a raised bed depth is generally suitable for common crops using planning assumptions for tomatoes, peppers, carrots, herbs, and greens.',
+    ],
+  };
+  const override = overrides[page.slug];
   return {
-    title: { absolute: title },
-    description,
-    authors: [{ name: SITE_PUBLISHER, url: SITE_URL }],
+    title: override?.[0] ?? page.title,
+    description: override?.[1] ?? page.description,
     alternates: {
-      canonical,
+      canonical: `/${page.slug}`,
     },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        'max-image-preview': 'large',
-        'max-snippet': -1,
-        'max-video-preview': -1,
-      },
-    },
-    openGraph: {
-      title,
-      description,
-      url: absoluteUrl,
-      siteName: SITE_NAME,
-      type: 'website',
-      images: [{ url: '/og-bedsoil.png', width: PRIMARY_OG_IMAGE.width, height: PRIMARY_OG_IMAGE.height, alt: previewAlt }],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: [{ url: '/og-bedsoil.png', alt: previewAlt }],
-    },
+    robots: isIndexableSlug(page.slug) ? { index: true, follow: true } : { index: false, follow: true },
   };
 }

@@ -2,54 +2,22 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { AdSenseAutoAds } from '@/components/AdSenseAutoAds';
-import { JsonLd } from '@/components/JsonLd';
-import { ADSENSE_CLIENT, SITE_NAME, SITE_PUBLISHER, SITE_URL } from '@/lib/site';
-import { siteStructuredData } from '@/lib/seo/jsonLd';
-import { HOME_PAGE_DESCRIPTION, HOME_PAGE_OG_DESCRIPTION, HOME_PAGE_TITLE } from '@/lib/seo/homeMeta';
-import { PRIMARY_OG_IMAGE } from '@/lib/data/imageSeo';
+import { ADSENSE_CLIENT, SITE_URL } from '@/lib/site';
 import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  applicationName: SITE_NAME,
-  category: 'gardening calculator',
-  creator: SITE_PUBLISHER,
-  publisher: SITE_PUBLISHER,
   title: {
-    default: HOME_PAGE_TITLE,
-    template: `%s | ${SITE_NAME}`,
+    default: 'Raised Bed Soil Calculator - Soil Volume, Bags & Shopping List',
+    template: '%s | BedSoil',
   },
-  description: HOME_PAGE_DESCRIPTION,
+  description: 'Enter raised bed length, width, depth, and bag size to estimate cubic feet, cubic yards, liters, bags, bulk cost, and a copyable shopping list.',
   alternates: {
     canonical: '/',
   },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-      'max-video-preview': -1,
-    },
-  },
-  icons: {
-    icon: '/favicon.svg',
-  },
   openGraph: {
-    title: HOME_PAGE_TITLE,
-    description: HOME_PAGE_OG_DESCRIPTION,
-    url: SITE_URL,
-    siteName: SITE_NAME,
+    siteName: 'BedSoil',
     type: 'website',
-    images: [{ url: '/og-bedsoil.png', width: PRIMARY_OG_IMAGE.width, height: PRIMARY_OG_IMAGE.height, alt: PRIMARY_OG_IMAGE.alt }],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: HOME_PAGE_TITLE,
-    description: HOME_PAGE_OG_DESCRIPTION,
-    images: [{ url: '/og-bedsoil.png', alt: PRIMARY_OG_IMAGE.alt }],
   },
   other: {
     'google-adsense-account': ADSENSE_CLIENT,
@@ -64,18 +32,12 @@ const nav = [
   ['Soil Mix', '/raised-bed-soil-mix-calculator'],
   ['Containers', '/container-soil-calculator'],
   ['Spacing', '/square-foot-garden-spacing-calculator'],
-  ['Compare', '/best-raised-bed-soil-calculators'],
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="license" href="/rsl.xml" type="application/rsl+xml" />
-      </head>
       <body>
-        <a className="skip-link" href="#main-content">Skip to main content</a>
-        <JsonLd data={siteStructuredData()} />
         <AdSenseAutoAds />
         <header className="header">
           <div className="bar">

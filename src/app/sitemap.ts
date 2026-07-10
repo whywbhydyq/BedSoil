@@ -1,9 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { allPages } from '@/lib/data/pages';
-import { lastModifiedForSlug } from '@/lib/seo/pageDates';
+import { isIndexableSlug } from '@/lib/publicPolicy';
 import { SITE_URL } from '@/lib/site';
-
-const baseUrl = SITE_URL;
 
 function priorityFor(slug: string) {
   if (slug === 'raised-bed-soil-calculator') return 0.95;
@@ -13,18 +11,14 @@ function priorityFor(slug: string) {
   return 0.7;
 }
 
-function changeFrequencyFor(slug: string): MetadataRoute.Sitemap[number]['changeFrequency'] {
-  if (['about', 'privacy', 'terms', 'disclaimer', 'contact', 'affiliate-disclosure'].includes(slug)) return 'monthly';
-  return 'weekly';
-}
-
 export default function sitemap(): MetadataRoute.Sitemap {
+  const now = new Date('2026-07-10T00:00:00.000Z');
   return [
-    { url: baseUrl, lastModified: lastModifiedForSlug(), changeFrequency: 'weekly', priority: 1 },
-    ...allPages.map((page) => ({
-      url: `${baseUrl}/${page.slug}`,
-      lastModified: lastModifiedForSlug(page.slug),
-      changeFrequency: changeFrequencyFor(page.slug),
+    { url: SITE_URL, lastModified: now, changeFrequency: 'weekly', priority: 1 },
+    ...allPages.filter((page) => isIndexableSlug(page.slug)).map((page) => ({
+      url: `${SITE_URL}/${page.slug}`,
+      lastModified: now,
+      changeFrequency: page.legal ? 'monthly' as const : 'weekly' as const,
       priority: priorityFor(page.slug),
     })),
   ];
